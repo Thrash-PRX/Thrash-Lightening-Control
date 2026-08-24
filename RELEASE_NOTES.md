@@ -1,6 +1,6 @@
-# Thrash Lightening Control v3.1.1
+# Thrash Lightening Control v3.1.2
 
-The God Mode release: a rebuilt lighting engine inside an original liquid-glass Windows interface.
+This patch adds full keyboard-and-mouse activity tracking to the rebuilt lighting engine and liquid-glass Windows interface.
 
 ## Highlights
 
@@ -10,7 +10,8 @@ The God Mode release: a rebuilt lighting engine inside an original liquid-glass 
 - Physical multi-key tracking prevents auto-repeat and early-release glitches
 - One-click effect switching and persistent top-right master power
 - Animated Thrash wordmark, live background-blurred glass surfaces, Light/Dark modes, and four accent themes
-- Battery Saver starts dark at boot, breathes up on the first key, and sleeps after 30 seconds idle
+- Battery Saver starts dark at boot, wakes on keyboard or mouse input, and sleeps after 30 seconds of total input inactivity
+- Mouse movement, clicks, and scrolling all wake the light and reset the Battery Saver timer
 - Clean normal mode with automatically tuned speeds and one recommended Reactive behavior
 - God Mode reveals advanced timing, alternate Reactive behavior, and adjustable idle timeout
 - Red scan-line God Mode unlock sequence
@@ -22,7 +23,7 @@ The God Mode release: a rebuilt lighting engine inside an original liquid-glass 
 
 ## Release assets
 
-- `ThrashLighteningControl-Setup-v3.1.1.exe` — signed compressed Windows installer
+- `ThrashLighteningControl-Setup-v3.1.2.exe` — signed compressed Windows installer
 - `SHA256SUMS.txt` — installer integrity checksum
 
 ## Hardware reality

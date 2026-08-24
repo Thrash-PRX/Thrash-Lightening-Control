@@ -52,6 +52,14 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
         ("dwExtraInfo", ctypes.c_ulonglong)
     ]
 
+
+class LASTINPUTINFO(ctypes.Structure):
+    """Windows timestamp for the most recent keyboard or mouse input."""
+    _fields_ = [
+        ("cbSize", wintypes.UINT),
+        ("dwTime", wintypes.DWORD),
+    ]
+
 # Declare HHOOK type
 if not hasattr(wintypes, 'HHOOK'):
     wintypes.HHOOK = wintypes.HANDLE
@@ -75,6 +83,9 @@ user32.CallNextHookEx.restype = ctypes.c_void_p
 user32.PostThreadMessageW.argtypes = [wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 user32.PostThreadMessageW.restype = wintypes.BOOL
 
+user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
+user32.GetLastInputInfo.restype = wintypes.BOOL
+
 kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
 kernel32.GetCurrentThreadId.restype = wintypes.DWORD
@@ -96,7 +107,7 @@ def resource_path(relative_path):
     return os.path.join(base, relative_path)
 
 
-APP_VERSION = "3.1.1"
+APP_VERSION = "3.1.2"
 APP_NAME = "Thrash Lightening Control"
 STARTUP_TASK_NAME = APP_NAME
 STARTUP_RUN_VALUE = APP_NAME
@@ -582,7 +593,7 @@ class KeyboardBacklightController:
 
 class EffectEngine:
     EFFECTS_META = [
-        {"id": "battery_saver", "name": "Battery Saver", "icon": "◉",  "desc": "Wakes softly, sleeps after 30 seconds"},
+        {"id": "battery_saver", "name": "Battery Saver", "icon": "◉",  "desc": "Wakes on input, sleeps after 30 seconds"},
         {"id": "breathe",   "name": "Breathe",        "icon": "◌",     "desc": "Slow, symmetrical soft breathing"},
         {"id": "heartbeat", "name": "Heartbeat",      "icon": "♥",     "desc": "Double-pulse heartbeat rhythm"},
         {"id": "disco",     "name": "Disco",          "icon": "✦",     "desc": "Random high-energy flashing"},
@@ -656,6 +667,7 @@ class EffectEngine:
         self._speaker_flash_until = 0.0
         self._speaker_glow_until = 0.0
         self._idle_started = time.monotonic()
+        self._last_input_tick = self._get_last_input_tick()
         self._default_level = None
         self._last_key_vk = None
         self.idle_sleeping = False
@@ -685,6 +697,7 @@ class EffectEngine:
         self._speaker_flash_until = 0.0
         self._speaker_glow_until = 0.0
         self._idle_started = time.monotonic()
+        self._last_input_tick = self._get_last_input_tick()
         self._default_level = None
         self.idle_sleeping = self.start_asleep
         self.idle_seconds = 0.0
@@ -871,6 +884,15 @@ class EffectEngine:
 
     # -- Effects ------------------------------------------------------------
 
+    @staticmethod
+    def _get_last_input_tick():
+        """Return Windows' latest combined keyboard/mouse activity tick."""
+        info = LASTINPUTINFO()
+        info.cbSize = ctypes.sizeof(LASTINPUTINFO)
+        if user32.GetLastInputInfo(ctypes.byref(info)):
+            return int(info.dwTime)
+        return None
+
     def _render_intensity(self, percent):
         """Render a perceived 0-100 intensity across the three native levels."""
         percent = max(0.0, min(100.0, float(percent)))
@@ -906,10 +928,22 @@ class EffectEngine:
         return True
 
     def _battery_saver(self):
-        """Wake softly to remembered intensity and sleep after 30 idle seconds."""
-        if self._keypress_event.is_set():
+        """Wake on keyboard/mouse activity and sleep after the idle timeout."""
+        keyboard_activity = self._keypress_event.is_set()
+        if keyboard_activity:
             self._keypress_event.clear()
-            if self._last_key_vk == 0x20 and not self.idle_sleeping:
+
+        latest_input_tick = self._get_last_input_tick()
+        system_activity = (
+            latest_input_tick is not None
+            and self._last_input_tick is not None
+            and latest_input_tick != self._last_input_tick
+        )
+        if latest_input_tick is not None:
+            self._last_input_tick = latest_input_tick
+
+        if keyboard_activity or system_activity:
+            if keyboard_activity and self._last_key_vk == 0x20 and not self.idle_sleeping:
                 # Fn itself is firmware-owned, but Space is visible. Give the
                 # native Fn+Space cycle time to settle, then synchronize.
                 previous_native = self.ctrl.current_level
@@ -1959,7 +1993,7 @@ class DesktopApplication(QMainWindow):
         default_icon = QLabel("◉")
         default_icon.setStyleSheet("color: #5ed1ff; font-size: 14px;")
         self.default_hint = QLabel(
-            "BATTERY SAVER  •  normal bright backlight  •  sleeps after 10 seconds idle  •  wakes on any key"
+            "BATTERY SAVER  •  normal bright backlight  •  sleeps after 30 seconds idle  •  wakes on keyboard or mouse input"
         )
         self.default_hint.setObjectName("hint")
         default_layout.addWidget(default_icon)
@@ -2504,7 +2538,7 @@ class DesktopApplication(QMainWindow):
     def _lighting_page(self):
         page, layout = self._page("LIGHTING", "Curated effects with hardware-safe automatic timing.")
         layout.addWidget(self._card_grid(self.LIGHTING_IDS, 3))
-        self.battery_note = QLabel("BATTERY SAVER  •  softly wakes to your chosen intensity  •  sleeps after 30 seconds")
+        self.battery_note = QLabel("BATTERY SAVER  •  wakes on keyboard or mouse input  •  sleeps after 30 seconds")
         self.battery_note.setObjectName("muted")
         self.battery_note.setWordWrap(True)
         self.battery_note.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
@@ -2790,7 +2824,7 @@ class DesktopApplication(QMainWindow):
     def _timeout_changed(self, value):
         self.engine.idle_timeout = float(value)
         self.timeout_label.setText(f"{value} SEC")
-        self.battery_note.setText(f"BATTERY SAVER  •  softly wakes to your chosen intensity  •  sleeps after {value} seconds")
+        self.battery_note.setText(f"BATTERY SAVER  •  wakes on keyboard or mouse input  •  sleeps after {value} seconds")
         self.settings.setValue("idleTimeout", value)
 
     def _toggle_god_mode(self, enabled):

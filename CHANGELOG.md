@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.1.2] - 2026-08-25
+
+- Battery Saver now wakes and resets its idle timer on mouse movement, clicks, and scrolling as well as keyboard input
+
 All notable user-facing changes are documented here.
 
 ## [3.1.1] - 2026-08-22

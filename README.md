@@ -8,17 +8,17 @@
 
 <p align="center">
   <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-38bdf8">
-  <img alt="Release v3.1.1" src="https://img.shields.io/badge/Release-v3.1.1-ef4058">
+  <img alt="Release v3.1.2" src="https://img.shields.io/badge/Release-v3.1.2-ef4058">
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-22c55e">
 </p>
 
-## What v3.1.1 does
+## What v3.1.2 does
 
 The app controls the keyboard's global white backlight through Lenovo Vantage's installed `IdeaNotebookAddin` interface. It is a real native desktop application: no localhost page, browser server, telemetry, cloud account, or audio upload.
 
 - Original Legion Space-inspired navigation with live background-blurred liquid-glass panels, animated Thrash branding, and a textured background
 - Dark and Light modes with Ion, Nova, Solar, and Matrix accent themes
-- Battery Saver that starts dark at Windows sign-in, breathes up on the first key, and sleeps after 30 idle seconds
+- Battery Saver that starts dark at Windows sign-in, wakes on keyboard or mouse input, and sleeps after 30 seconds of total input inactivity
 - Rebuilt 96 Hz Breathe renderer with a slower symmetric curve, protected speed range, and 1–100 perceived intensity control
 - One-click effect switching with a persistent master power control in the top-right corner
 - Streamlined Reactive mode with true key-hold tracking, a timed single-pulse alternative in God Mode, and tuned default timing
@@ -40,7 +40,7 @@ Compatibility is detected from Lenovo Vantage's backlight capability rather than
 ## Download and install
 
 1. Open the repository's [Releases](../../releases) page.
-2. Download `ThrashLighteningControl-Setup-v3.1.1.exe` and `SHA256SUMS.txt`.
+2. Download `ThrashLighteningControl-Setup-v3.1.2.exe` and `SHA256SUMS.txt`.
 3. If Chrome, Edge, or another browser blocks the installer, open the browser's **Downloads** page (`Ctrl+J`), locate the blocked file, and choose **Keep**, **Allow download**, or **Download unsafe file**. Only allow it when it came from this repository.
 4. Verify the installer's SHA-256 value against `SHA256SUMS.txt`.
 5. Run the installer and accept the Windows administrator prompt.
@@ -63,7 +63,7 @@ The release is Authenticode-signed with a self-signed `CN=Thrash` certificate. W
 
 | Mode | Behavior |
 | --- | --- |
-| Battery Saver | Soft wake to the selected intensity; off after 30 seconds idle |
+| Battery Saver | Soft wake on keyboard or mouse input; off after 30 seconds of total input inactivity |
 | Breathe | Slow symmetric breathing at a stable 96 Hz render cadence |
 | Heartbeat | Double-pulse rhythm |
 | Disco | Random high-energy pattern |
@@ -78,7 +78,7 @@ Blink, Strobe, SOS, Lightning, and Candle were removed in v3.1.1 to keep the sta
 
 ## Battery Saver, startup, and tray
 
-When launched by Windows startup, the keyboard begins off. Battery Saver runs quietly in the tray and the first keypress breathes the light up to the user's remembered 1–100 intensity. After 30 seconds without keyboard input, it fades out again. The timeout can be changed only in God Mode.
+When launched by Windows startup, the keyboard begins off. Battery Saver runs quietly in the tray and the first keyboard or mouse input breathes the light up to the user's remembered 1–100 intensity. Mouse movement, clicks, scrolling, and keypresses all reset the timer. After 30 seconds without any of those inputs, it fades out again. The timeout can be changed only in God Mode.
 
 **Run at Windows Startup** creates a current-user Startup apps entry and an elevated on-demand scheduled task named `Thrash Lightening Control`. This avoids leaving a visible console window and lets the entry appear in Task Manager. Turning the option off removes both entries. No Windows service is installed.
 

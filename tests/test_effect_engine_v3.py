@@ -55,6 +55,43 @@ class EffectEngineV3Tests(unittest.TestCase):
         engine = app.EffectEngine(RecordingController())
         self.assertEqual(engine.idle_timeout, 30.0)
 
+    def test_battery_saver_mouse_activity_wakes_and_resets_idle_timer(self):
+        engine = app.EffectEngine(RecordingController())
+        engine.running = True
+        engine.intensity = 64
+        engine.idle_sleeping = True
+        engine._idle_started = 1.0
+        engine._last_input_tick = 100
+
+        with patch.object(engine, "_get_last_input_tick", return_value=101), patch.object(
+            app.time, "monotonic", return_value=40.0
+        ), patch.object(engine, "_fade_to", return_value=False) as fade, patch.object(
+            engine, "_wait", return_value=True
+        ):
+            engine._battery_saver()
+
+        self.assertFalse(engine.idle_sleeping)
+        self.assertEqual(engine.idle_seconds, 0.0)
+        self.assertEqual(engine._idle_started, 40.0)
+        fade.assert_called_once_with(64, 0.68, start=0)
+
+    def test_battery_saver_unchanged_system_input_does_not_reset_idle(self):
+        engine = app.EffectEngine(RecordingController())
+        engine.running = True
+        engine.idle_timeout = 30.0
+        engine._idle_started = 0.0
+        engine._last_input_tick = 100
+
+        with patch.object(engine, "_get_last_input_tick", return_value=100), patch.object(
+            app.time, "monotonic", return_value=31.0
+        ), patch.object(engine, "_fade_to", return_value=False) as fade, patch.object(
+            engine, "_wait", return_value=True
+        ):
+            engine._battery_saver()
+
+        self.assertTrue(engine.idle_sleeping)
+        fade.assert_called_once_with(0, 0.48)
+
     def test_breathe_curve_has_soft_symmetric_shoulders(self):
         samples = [app.EffectEngine._breathe_envelope(i / 100) for i in range(101)]
         self.assertAlmostEqual(samples[0], 0.0)

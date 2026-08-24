@@ -1,5 +1,5 @@
 #define MyAppName "Thrash Lightening Control"
-#define MyAppVersion "3.1.1"
+#define MyAppVersion "3.1.2"
 #define MyAppPublisher "Thrash"
 #define MyAppExeName "ThrashLighteningControl.exe"
 
@@ -37,7 +37,7 @@ VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
-VersionInfoVersion=3.1.1.0
+VersionInfoVersion=3.1.2.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
