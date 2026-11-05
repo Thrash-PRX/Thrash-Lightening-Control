@@ -73,6 +73,20 @@ class DesktopShellTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.settings_directory.cleanup()
 
+    def test_native_presets_start_steady_and_dashboard_tracks_power(self):
+        engine = DummyEngine()
+        window = app.DesktopApplication(DummyController(), engine)
+        window._native_preset(100)
+        window._refresh_status()
+        self.assertEqual(window.selected_effect(), "steady")
+        self.assertEqual(engine.start_calls[-1][0], "steady")
+        self.assertEqual(window.intensity_slider.value(), 100)
+        self.assertIn("Steady", window.lighting_summary.text())
+        window.toggle_power()
+        window._refresh_status()
+        self.assertIn("Off", window.lighting_summary.text())
+        window._quit_application()
+
     def test_close_hides_to_tray_and_quit_cleans_up(self):
         controller = DummyController()
         engine = DummyEngine()

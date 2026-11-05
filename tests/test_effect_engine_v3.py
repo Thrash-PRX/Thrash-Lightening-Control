@@ -23,23 +23,41 @@ class EffectEngineV3Tests(unittest.TestCase):
     def test_public_modes_exclude_retired_flash_modes(self):
         ids = {effect["id"] for effect in app.EffectEngine.EFFECTS_META}
         self.assertTrue({"battery_saver", "breathe", "reactive", "music_speaker"} <= ids)
-        self.assertTrue({"blink", "strobe", "sos", "lightning", "candle"}.isdisjoint(ids))
+        self.assertTrue({"blink", "strobe", "sos", "lightning", "candle", "heartbeat", "disco", "pulse", "binary"}.isdisjoint(ids))
 
-    def test_intensity_uses_temporal_blending_between_native_levels(self):
+    def test_constant_intensity_does_not_toggle_native_states(self):
         controller = RecordingController()
         engine = app.EffectEngine(controller)
-        levels = [engine._render_intensity(25) for _ in range(120)]
-        self.assertAlmostEqual(sum(levels) / len(levels), 0.5, delta=0.03)
         levels = [engine._render_intensity(75) for _ in range(120)]
-        self.assertAlmostEqual(sum(levels) / len(levels), 1.5, delta=0.03)
+        self.assertEqual(len(set(levels)), 1)
+        self.assertLessEqual(len(controller.levels), 1)
 
-    def test_intensity_scales_for_one_level_white_backlights(self):
+    def test_hysteresis_suppresses_boundary_chatter_and_off_is_exact(self):
+        controller = RecordingController()
+        engine = app.EffectEngine(controller)
+        for value in [50, 74, 76, 74, 76]:
+            engine._render_intensity(value)
+        self.assertEqual(controller.levels, [1])
+        engine._render_intensity(100)
+        engine._render_intensity(0)
+        self.assertEqual(controller.levels[-2:], [2, 0])
+
+    def test_one_level_keyboard_never_receives_bright_state(self):
         controller = RecordingController()
         controller.max_level = 1
         engine = app.EffectEngine(controller)
-        levels = [engine._render_intensity(40) for _ in range(100)]
-        self.assertAlmostEqual(sum(levels) / len(levels), 0.4, delta=0.03)
-        self.assertLessEqual(max(levels), 1)
+        for value in range(101):
+            engine._render_intensity(value)
+        self.assertEqual(controller.levels, [1])
+
+    def test_steady_uses_native_dim_without_repeated_writes(self):
+        controller = RecordingController()
+        engine = app.EffectEngine(controller)
+        engine.intensity = 50
+        with patch.object(engine, "_wait", return_value=False):
+            for _ in range(10):
+                engine._steady()
+        self.assertEqual(controller.levels, [1])
 
     def test_recommended_speed_is_used_without_god_mode_override(self):
         controller = RecordingController()

@@ -32,7 +32,7 @@ The helper is created with `CREATE_NO_WINDOW`, receives only fixed brightness to
 
 Effects execute on a daemon worker thread. The controller serializes hardware writes with a lock. Stopping an effect signals an event, joins the worker, closes effect-specific audio resources, and restores the nearest native level for the selected intensity.
 
-Lenovo's white-backlight contract exposes either one or two illuminated levels plus off. The 1–100 control, Breathe, fades, and Wave use 60 Hz pulse-density blending between adjacent native states. This improves perceived smoothness but does not invent additional hardware brightness levels or spatial zones.
+Lenovo's white-backlight contract exposes either one or two illuminated levels plus off. The 1–100 control sets an effect envelope, quantized to native states with hysteresis. Breathe and Wave sample at 30 Hz and send only changes. Steady holds the nearest illuminated state. No software PWM is sent over IPC; fades remain discrete hardware steps.
 
 ## Audio modes
 

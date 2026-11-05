@@ -12,21 +12,17 @@
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-22c55e">
 </p>
 
-## What v3.1.2 does
+## v3.2.0 development branch
 
-The app controls the keyboard's global white backlight through Lenovo Vantage's installed `IdeaNotebookAddin` interface. It is a real native desktop application: no localhost page, browser server, telemetry, cloud account, or audio upload.
+Native Qt dashboard with a live lighting summary, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The original dashboard work on this branch is preserved.
 
-- Original Legion Space-inspired navigation with live background-blurred liquid-glass panels, animated Thrash branding, and a textured background
-- Dark and Light modes with Ion, Nova, Solar, and Matrix accent themes
-- Battery Saver that starts dark at Windows sign-in, wakes on keyboard or mouse input, and sleeps after 30 seconds of total input inactivity
-- Rebuilt 96 Hz Breathe renderer with a slower symmetric curve, protected speed range, and 1–100 perceived intensity control
-- One-click effect switching with a persistent master power control in the top-right corner
-- Streamlined Reactive mode with true key-hold tracking, a timed single-pulse alternative in God Mode, and tuned default timing
-- Separate Music / Mic and Music / Speaker modes; Speaker uses Windows output and adaptive beat-onset detection
-- Optional God Mode that reveals speed, reactive variants, and the Battery Saver timeout after a red unlock animation
-- System-tray operation, Task Manager-visible startup entry, diagnostics, privacy information, and clean uninstall
+The focused mode catalog contains Steady, Battery Saver, Breathe, Surge Wave, Reactive, and the two audio modes. Repetitive Heartbeat, Disco, Pulse, and Binary Clock are retired. Existing saved selections for retired modes fall back to Battery Saver without auto-starting.
 
-The keyboard hardware exposes only Off, Dim, and Bright. Intermediate intensities and smoother fades are approximated with fast pulse-density blending. This is the smoothest transition the exposed Lenovo interface permits, but it cannot become the same hardware-native PWM animation available on keyboards with a dedicated lighting controller.
+The hardware provides Off/Dim/Bright (some models have only one illuminated level). Effect envelopes use native steps with hysteresis, not rapid software PWM. This reduces repeated bridge writes and boundary flicker; it does not provide continuous dimming. Steady keeps a constant native level for focused work.
+
+This is a standalone app using a private Lenovo compatibility bridge, **not a Vantage plugin**. See [integration findings](docs/vantage-integration.md).
+
+CI artifacts for this branch are unsigned development builds. Validate the hardware and installer before release. No new signed release is claimed.
 
 ## Requirements
 
@@ -39,15 +35,7 @@ Compatibility is detected from Lenovo Vantage's backlight capability rather than
 
 ## Download and install
 
-1. Open the repository's [Releases](../../releases) page.
-2. Download `ThrashLighteningControl-Setup-v3.1.2.exe` and `SHA256SUMS.txt`.
-3. If Chrome, Edge, or another browser blocks the installer, open the browser's **Downloads** page (`Ctrl+J`), locate the blocked file, and choose **Keep**, **Allow download**, or **Download unsafe file**. Only allow it when it came from this repository.
-4. Verify the installer's SHA-256 value against `SHA256SUMS.txt`.
-5. Run the installer and accept the Windows administrator prompt.
-
-The compressed installer contains the application, public Thrash certificate, verification notes, checksum, README, license, shortcuts, and uninstaller. It does not silently add the self-signed certificate to a trusted store.
-
-The release is Authenticode-signed with a self-signed `CN=Thrash` certificate. Windows may still display an unknown-publisher or reputation warning on another PC. A universally trusted publisher label requires a commercial CA-issued certificate.
+Stable releases remain on the repository [Releases](../../releases) page. For v3.2.0 validation, download the unsigned Windows build artifact from the branch PR checks and compare its installer SHA-256 with the accompanying checksum file. The installer does not install certificates or Lenovo assemblies.
 
 ## How to use
 
@@ -61,20 +49,15 @@ The release is Authenticode-signed with a self-signed `CN=Thrash` certificate. W
 
 ## Modes
 
-| Mode | Behavior |
+| Mode | Purpose |
 | --- | --- |
-| Battery Saver | Soft wake on keyboard or mouse input; off after 30 seconds of total input inactivity |
-| Breathe | Slow symmetric breathing at a stable 96 Hz render cadence |
-| Heartbeat | Double-pulse rhythm |
-| Disco | Random high-energy pattern |
-| Pulse | Fast rise and controlled fade |
-| Binary Clock | Encodes the current seconds in six pulses |
-| Wave | Fast surge, held crest, long tail, and a smaller secondary ripple |
-| Reactive | Dim idle, bright keypress, smooth release; accurately follows multiple held keys |
-| Music / Mic | Follows energy from the default microphone locally |
-| Music / Speaker | Reacts to beat-like transients from Windows speaker output, not the microphone |
-
-Blink, Strobe, SOS, Lightning, and Candle were removed in v3.1.1 to keep the standard experience focused. Speed and alternate Reactive behaviors are hidden unless God Mode is enabled. In Reactive Lab, **Single timed pulse** ends on its timer, while **Hold until every key is released** remains active until the last physical key is released.
+| Steady | Constant Dim or Bright for work |
+| Battery Saver | Wake on input, sleep after inactivity |
+| Breathe | Slow symmetric native-step rhythm |
+| Surge Wave | Asymmetric crest and trailing ripple |
+| Reactive | Brighten on typing, fade on release |
+| Music / Mic | Follow microphone energy locally |
+| Music / Speaker | Follow Windows output peaks locally |
 
 ## Battery Saver, startup, and tray
 
@@ -94,8 +77,8 @@ Lenovo exposes this backlight interface through private .NET assemblies installe
 ## Build from source
 
 ```powershell
-git clone https://github.com/Thrash-PRX/Lenovo-LOQ-Backlit-Effects-Thrash.git
-cd Lenovo-LOQ-Backlit-Effects-Thrash
+git clone https://github.com/Thrash-PRX/Thrash-Lightening-Control.git
+cd Thrash-Lightening-Control
 py -m pip install -r requirements-build.txt
 py -m PyInstaller --clean --noconfirm keyboard-effects.spec
 ```

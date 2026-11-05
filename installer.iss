@@ -47,7 +47,6 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "installer-app\ThrashLighteningControl\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "installer\Thrash-Code-Signing.cer"; DestDir: "{app}\Verification"; Flags: ignoreversion
 Source: "installer\SHA256SUMS.txt"; DestDir: "{app}\Verification"; Flags: ignoreversion
 Source: "installer\VERIFICATION.txt"; DestDir: "{app}\Verification"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; DestName: "README.md"; Flags: ignoreversion

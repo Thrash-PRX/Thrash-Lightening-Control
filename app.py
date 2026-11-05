@@ -15,8 +15,6 @@ from ctypes import wintypes
 import subprocess
 import glob
 import re
-import random
-import datetime
 import queue
 import math
 import tempfile
@@ -594,12 +592,9 @@ class KeyboardBacklightController:
 
 class EffectEngine:
     EFFECTS_META = [
+        {"id": "steady", "name": "Steady", "icon": "☀", "desc": "Constant native brightness for focused work"},
         {"id": "battery_saver", "name": "Battery Saver", "icon": "◉",  "desc": "Wakes on input, sleeps after 30 seconds"},
         {"id": "breathe",   "name": "Breathe",        "icon": "◌",     "desc": "Slow, symmetrical soft breathing"},
-        {"id": "heartbeat", "name": "Heartbeat",      "icon": "♥",     "desc": "Double-pulse heartbeat rhythm"},
-        {"id": "disco",     "name": "Disco",          "icon": "✦",     "desc": "Random high-energy flashing"},
-        {"id": "pulse",     "name": "Pulse",          "icon": "◍",     "desc": "Quick flash with a slow fade"},
-        {"id": "binary",    "name": "Binary Clock",   "icon": "01",    "desc": "Encodes seconds in binary"},
         {"id": "wave",      "name": "Surge Wave",     "icon": "≈",     "desc": "Fast crest with a long trailing ripple"},
         {"id": "reactive",  "name": "Reactive",       "icon": "⌨",     "desc": "Brightens on every keypress"},
         {"id": "music_mic", "name": "Music / Mic",    "icon": "♪",     "desc": "Follows the default microphone"},
@@ -640,7 +635,6 @@ class EffectEngine:
         self.idle_timeout = 30.0
         self.start_asleep = False
         self._rendered_intensity = 0.0
-        self._pdm_error = 0.0
         self._stop = threading.Event()
         self._thread = None
 
@@ -703,7 +697,6 @@ class EffectEngine:
         self.idle_sleeping = self.start_asleep
         self.idle_seconds = 0.0
         self._rendered_intensity = 0.0
-        self._pdm_error = 0.0
         self.music_level = 0.0
         with self._keys_lock:
             self._pressed_keys.clear()
@@ -740,12 +733,9 @@ class EffectEngine:
 
     def _loop(self):
         fns = {
+            "steady": self._steady,
             "battery_saver": self._battery_saver,
             "breathe": self._breathe,
-            "heartbeat": self._heartbeat,
-            "disco": self._disco,
-            "pulse": self._pulse,
-            "binary": self._binary,
             "wave": self._wave, "reactive": self._reactive,
             "music_mic": self._music_mic,
             "music_speaker": self._music_speaker,
@@ -895,25 +885,35 @@ class EffectEngine:
         return None
 
     def _render_intensity(self, percent):
-        """Render a perceived 0-100 intensity across the three native levels."""
+        """Quantize to native states with hysteresis; never simulate PWM over IPC."""
         percent = max(0.0, min(100.0, float(percent)))
         self._rendered_intensity = percent
         maximum = max(1, int(getattr(self.ctrl, "max_level", 2)))
-        target = (percent / 100.0) * maximum
-        base = min(maximum, int(math.floor(target)))
-        fraction = max(0.0, target - base)
-        level = base
-        if base < maximum and fraction > 0:
-            self._pdm_error += fraction
-            if self._pdm_error >= 1.0:
-                level = base + 1
-                self._pdm_error -= 1.0
+        target = percent / 100.0 * maximum
+        current = max(0, min(maximum, self.ctrl.current_level))
+        # A small dead band prevents repeated writes around a level boundary.
+        if percent == 0:
+            level = 0
+        elif percent == 100:
+            level = maximum
+        elif target > current + 0.58 or target < current - 0.58:
+            level = min(maximum, max(0, int(math.floor(target + 0.5))))
+        else:
+            level = current
         if level != self.ctrl.current_level:
             self.ctrl.set_brightness(level)
         return level
 
+    def _steady(self):
+        maximum = max(1, int(getattr(self.ctrl, "max_level", 2)))
+        level = max(1, min(maximum, int(math.floor(self.intensity / 100 * maximum + 0.5))))
+        if level != self.ctrl.current_level:
+            self.ctrl.set_brightness(level)
+        self._rendered_intensity = self.intensity
+        return self._wait(0.10)
+
     def _fade_to(self, target, duration=0.55, start=None):
-        """Perceptually smooth transition using sine easing and pulse-density blending."""
+        """Sine-eased envelope rendered as discrete native brightness steps."""
         start = self._rendered_intensity if start is None else float(start)
         target = max(0.0, min(100.0, float(target)))
         started = time.monotonic()
@@ -981,8 +981,8 @@ class EffectEngine:
         return math.sin(math.pi * phase) ** 1.28
 
     def _breathe(self):
-        """Stable high-rate pulse-density breathe for Lenovo's 3 native levels."""
-        frame = 1.0 / 96.0
+        """Slow symmetric envelope across native brightness steps."""
+        frame = 1.0 / 30.0
         deadline = time.monotonic()
         previous = deadline
         phase = 0.0
@@ -1019,40 +1019,9 @@ class EffectEngine:
             return 0.48 * (1.0 - ripple_tail) ** 1.8
         return 0.0
 
-    def _heartbeat(self):
-        b, p, r = 0.12 / self.speed, 0.15 / self.speed, 0.7 / self.speed
-        self._render_intensity(self.intensity)
-        if self._wait(b): return True
-        self._render_intensity(0)
-        if self._wait(p): return True
-        self._render_intensity(self.intensity)
-        if self._wait(b): return True
-        self._render_intensity(0)
-        if self._wait(r): return True
-
-    def _disco(self):
-        self._render_intensity(self.intensity)
-        if self._wait(random.uniform(0.04, 0.25) / self.speed): return True
-        self._render_intensity(0)
-        if self._wait(random.uniform(0.04, 0.25) / self.speed): return True
-
-    def _pulse(self):
-        if self._fade_to(self.intensity, 0.10 / self.speed, start=0): return True
-        if self._fade_to(0, 0.72 / self.speed, start=self.intensity): return True
-        if self._wait(0.18 / self.speed): return True
-
-    def _binary(self):
-        bits = format(datetime.datetime.now().second, "06b")
-        for b in bits:
-            if not self.running: return True
-            self._render_intensity(self.intensity if b == "1" else 0)
-            if self._wait(0.35 / self.speed): return True
-        self._render_intensity(0)
-        if self._wait(0.6 / self.speed): return True
-
     def _wave(self):
         """A visibly asymmetric surge and secondary ripple for one lighting zone."""
-        frame = 1.0 / 96.0
+        frame = 1.0 / 30.0
         deadline = time.monotonic()
         previous = deadline
         phase = 0.0
@@ -1225,7 +1194,7 @@ class EffectEngine:
 
     def _reactive(self):
         """Continuously render idle/active levels so hold and pulse are distinct."""
-        frame = 1.0 / 96.0
+        frame = 1.0 / 30.0
         seen_counter = 0
 
         while self.running:
@@ -1777,438 +1746,6 @@ class BootSplash(QWidget):
         painter.end()
 
 
-class DesktopApplication(QMainWindow):
-    """Qt desktop interface; no web server or browser is involved."""
-
-    def __init__(self, ctrl, effect_engine):
-        super().__init__()
-        self.ctrl = ctrl
-        self.engine = effect_engine
-        self.light_on = True
-        self.effect_buttons = QButtonGroup(self)
-        self.react_buttons = QButtonGroup(self)
-        self.hold_buttons = QButtonGroup(self)
-        self.appearance_buttons = QButtonGroup(self)
-        self.accent_buttons = QButtonGroup(self)
-        self._shown_error = None
-        self._entrance_animation = None
-        self._has_animated = False
-        self._quitting = False
-        self._tray_notice_shown = False
-        self._build_ui()
-        self._build_tray()
-        self._effect_changed()
-
-        self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self._refresh_status)
-        self.status_timer.start(500)
-        self._refresh_status()
-
-    def _build_tray(self):
-        self.tray_icon = QSystemTrayIcon(self.windowIcon(), self)
-        self.tray_icon.setToolTip("Lenovo LOQ Backlit Effects - Thrash")
-        tray_menu = QMenu()
-        open_action = QAction("Open Lenovo LOQ Backlit Effects", self)
-        open_action.triggered.connect(self._restore_from_tray)
-        quit_action = QAction("Quit", self)
-        quit_action.triggered.connect(self._quit_application)
-        tray_menu.addAction(open_action)
-        tray_menu.addSeparator()
-        tray_menu.addAction(quit_action)
-        self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.activated.connect(self._tray_activated)
-        self.tray_icon.show()
-
-    def _tray_activated(self, reason):
-        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
-            self._restore_from_tray()
-
-    def _restore_from_tray(self):
-        self.showNormal()
-        self.raise_()
-        self.activateWindow()
-
-    def _quit_application(self):
-        self._quitting = True
-        self.status_timer.stop()
-        self.engine.stop()
-        self.ctrl.shutdown()
-        self.tray_icon.hide()
-        QApplication.instance().quit()
-
-    def _build_ui(self):
-        self.setWindowTitle("Lenovo LOQ Backlit Effects - Thrash")
-        self.setWindowIcon(QIcon(resource_path(os.path.join("assets", "app-icon.png"))))
-        self.resize(1180, 900)
-        self.setMinimumSize(980, 780)
-        self.setStyleSheet("""
-            QMainWindow { background: #05070d; }
-            QWidget { color: #e7eef5; font: 9.5pt 'Segoe UI Variable Text'; }
-            QLabel { background: transparent; color: #f1f5f9; }
-            QLabel#eyebrow { color: #55c9ff; font: 600 8pt 'Segoe UI Variable Text'; letter-spacing: 2px; }
-            QLabel#title { font: 650 27pt 'Segoe UI Variable Display'; color: #f8fbff; }
-            QLabel#subtitle, QLabel#section, QLabel#hint { color: #94a3b8; }
-            QLabel#section { font: 600 8pt 'Segoe UI Variable Text'; letter-spacing: 1.5px; }
-            QFrame#brandChip { background: rgba(14, 31, 46, 225); border: 1px solid #24516d;
-                               border-radius: 14px; }
-            QLabel#brandMark { color: #56c9ff; font: 700 15pt 'Segoe UI Variable Display'; }
-            QLabel#brandWord { color: #d8e8f3; font: 600 8pt 'Segoe UI Variable Text'; letter-spacing: 1px; }
-            QLabel#connectionDot { color: #2dd4bf; font-size: 15px; }
-            QFrame#panel, QGroupBox { background: rgba(14, 20, 31, 232);
-                                     border: 1px solid rgba(94, 129, 163, 72); border-radius: 17px; }
-            QFrame#notice { background: rgba(11, 31, 45, 210); border: 1px solid rgba(63, 142, 184, 90);
-                            border-radius: 12px; }
-            QGroupBox { margin-top: 10px; padding: 14px 10px 10px; }
-            QGroupBox::title { subcontrol-origin: margin; left: 12px; color: #94a3b8; padding: 0 5px; }
-            QRadioButton { background: transparent; padding: 8px; }
-            QRadioButton:hover { color: #67c5ff; }
-            QCheckBox { spacing: 9px; color: #b7c8d8; padding: 4px; }
-            QCheckBox::indicator { width: 17px; height: 17px; border: 1px solid #4c6680;
-                                   border-radius: 5px; background: #0c1521; }
-            QCheckBox::indicator:checked { background: #38bdf8; border-color: #70d5ff; }
-            QPushButton { background: rgba(31, 42, 58, 235); border: 1px solid rgba(95, 123, 153, 45);
-                          border-radius: 11px; padding: 11px 17px; font: 600 8.5pt 'Segoe UI Variable Text'; }
-            QPushButton:hover { background: rgba(42, 58, 80, 245); border-color: rgba(94, 186, 238, 100); }
-            QPushButton#start { background: #38bdf8; color: #041019; font: 700 9pt 'Segoe UI Variable Text'; border: 0; }
-            QPushButton#start:hover { background: #7dd3fc; }
-            QPushButton#start[running="true"] { background: #fb7185; color: #19070a; }
-            QSlider::groove:horizontal { height: 5px; background: #263349; border-radius: 2px; }
-            QSlider::sub-page:horizontal { background: #168ec5; border-radius: 2px; }
-            QSlider::handle:horizontal { width: 20px; margin: -8px 0; background: #7dd3fc;
-                                         border: 2px solid #0b3950; border-radius: 10px; }
-            QProgressBar { height: 7px; background: #222a38; border: 0; border-radius: 3px; }
-            QProgressBar::chunk { background: #38bdf8; border-radius: 3px; }
-        """)
-
-        central = AmbientBackground()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(30, 25, 30, 26)
-        layout.setSpacing(15)
-
-        header = QHBoxLayout()
-        heading = QVBoxLayout()
-        heading.setSpacing(3)
-        eyebrow = QLabel("LENOVO LOQ  /  NATIVE WINDOWS")
-        eyebrow.setObjectName("eyebrow")
-        title = QLabel("Backlit Effects")
-        title.setObjectName("title")
-        subtitle = QLabel("Precision control for your single-zone keyboard")
-        subtitle.setObjectName("subtitle")
-        heading.addWidget(eyebrow)
-        heading.addWidget(title)
-        heading.addWidget(subtitle)
-
-        brand = QFrame()
-        brand.setObjectName("brandChip")
-        brand.setFixedSize(126, 50)
-        brand_layout = QHBoxLayout(brand)
-        brand_layout.setContentsMargins(13, 6, 13, 6)
-        brand_layout.setSpacing(9)
-        brand_mark = QLabel("T/")
-        brand_mark.setObjectName("brandMark")
-        brand_word = QLabel("THRASH")
-        brand_word.setObjectName("brandWord")
-        brand_layout.addWidget(brand_mark)
-        brand_layout.addWidget(brand_word)
-        header.addLayout(heading)
-        header.addStretch()
-        header.addWidget(brand, 0, Qt.AlignVCenter)
-        layout.addLayout(header)
-
-        status_panel = QFrame()
-        status_panel.setObjectName("panel")
-        status_layout = QHBoxLayout(status_panel)
-        status_layout.setContentsMargins(16, 12, 16, 12)
-        self.connection_dot = QLabel("●")
-        self.connection_dot.setObjectName("connectionDot")
-        self.method_label = ElidedLabel("Detecting Lenovo lighting bridge…")
-        self.state_label = QLabel("Ready")
-        self.state_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        status_layout.addWidget(self.connection_dot)
-        status_layout.addWidget(self.method_label, 1)
-        status_layout.addWidget(self.state_label)
-        layout.addWidget(status_panel)
-
-        effects_panel = QFrame()
-        effects_panel.setObjectName("panel")
-        effects_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        effects_layout = QVBoxLayout(effects_panel)
-        effects_layout.setContentsMargins(16, 15, 16, 16)
-        section = QLabel("LIGHTING MODES")
-        section.setObjectName("section")
-        section.setFixedHeight(20)
-        effects_layout.addWidget(section)
-
-        grid_widget = QWidget()
-        grid_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid = QGridLayout()
-        grid_widget.setLayout(grid)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(8)
-        for index, effect in enumerate(EffectEngine.EFFECTS_META):
-            button = EffectCard(effect)
-            button.setProperty("effect_id", effect["id"])
-            self.effect_buttons.addButton(button, index)
-            grid.addWidget(button, index // 4, index % 4)
-            if effect["id"] == "default":
-                button.setChecked(True)
-        self.effect_buttons.buttonClicked.connect(self._effect_changed)
-        effects_layout.addWidget(grid_widget)
-
-        self.speed_header_widget = QWidget()
-        self.speed_header_widget.setFixedHeight(24)
-        speed_header = QHBoxLayout(self.speed_header_widget)
-        speed_header.setContentsMargins(0, 0, 0, 0)
-        self.speed_title = QLabel("SPEED")
-        self.speed_title.setObjectName("section")
-        self.speed_label = QLabel("1.0x")
-        speed_header.addWidget(self.speed_title)
-        speed_header.addStretch()
-        speed_header.addWidget(self.speed_label)
-        effects_layout.addWidget(self.speed_header_widget)
-
-        self.speed_slider = QSlider(Qt.Horizontal)
-        self.speed_slider.setRange(2, 40)
-        self.speed_slider.setValue(10)
-        self.speed_slider.valueChanged.connect(self._speed_changed)
-        effects_layout.addWidget(self.speed_slider)
-
-        self.music_panel = QWidget()
-        music_layout = QVBoxLayout(self.music_panel)
-        music_layout.setContentsMargins(0, 4, 0, 0)
-        self.music_hint = QLabel("Audio source ready • sensitivity controls the lighting response")
-        self.music_hint.setObjectName("hint")
-        self.music_meter = QProgressBar()
-        self.music_meter.setRange(0, 100)
-        self.music_meter.setTextVisible(False)
-        music_layout.addWidget(self.music_hint)
-        music_layout.addWidget(self.music_meter)
-        effects_layout.addWidget(self.music_panel)
-
-        self.default_panel = QFrame()
-        self.default_panel.setObjectName("notice")
-        default_layout = QHBoxLayout(self.default_panel)
-        default_layout.setContentsMargins(14, 9, 14, 9)
-        default_icon = QLabel("◉")
-        default_icon.setStyleSheet("color: #5ed1ff; font-size: 14px;")
-        self.default_hint = QLabel(
-            "BATTERY SAVER  •  normal bright backlight  •  sleeps after 30 seconds idle  •  wakes on keyboard or mouse input"
-        )
-        self.default_hint.setObjectName("hint")
-        default_layout.addWidget(default_icon)
-        default_layout.addWidget(self.default_hint, 1)
-        effects_layout.addWidget(self.default_panel)
-
-        self.reactive_panel = QGroupBox("REACTIVE OPTIONS")
-        reactive_layout = QVBoxLayout(self.reactive_panel)
-        reaction_row = QHBoxLayout()
-        reactions = [
-            (1, "On → Off"), (2, "Dim → Bright"), (3, "Bright → Dim"),
-            (4, "Off → Dim"), (5, "Off → Bright"),
-        ]
-        for value, label in reactions:
-            button = QRadioButton(label)
-            self.react_buttons.addButton(button, value)
-            reaction_row.addWidget(button)
-            if value == 1:
-                button.setChecked(True)
-        reactive_layout.addLayout(reaction_row)
-
-        hold_row = QHBoxLayout()
-        for value, label in [(1, "Blink repeatedly"), (2, "Stay active until released")]:
-            button = QRadioButton(label)
-            self.hold_buttons.addButton(button, value)
-            hold_row.addWidget(button)
-            if value == 1:
-                button.setChecked(True)
-        hold_row.addStretch()
-        reactive_layout.addLayout(hold_row)
-        self.react_buttons.buttonClicked.connect(self._restart_if_running)
-        self.hold_buttons.buttonClicked.connect(self._restart_if_running)
-        effects_layout.addWidget(self.reactive_panel)
-        layout.addWidget(effects_panel)
-
-        preferences = QHBoxLayout()
-        preferences.setContentsMargins(4, 0, 4, 0)
-        self.startup_checkbox = QCheckBox("RUN AT WINDOWS STARTUP")
-        self.startup_checkbox.setChecked(startup_task_enabled())
-        self.startup_checkbox.toggled.connect(self._set_startup)
-        startup_note = QLabel("Appears in Task Manager Startup apps  •  launches elevated to the system tray")
-        startup_note.setObjectName("hint")
-        preferences.addWidget(self.startup_checkbox)
-        preferences.addWidget(startup_note)
-        preferences.addStretch()
-        layout.addLayout(preferences)
-
-        actions = QHBoxLayout()
-        self.start_button = QPushButton("START MODE")
-        self.start_button.setObjectName("start")
-        self.start_button.clicked.connect(self.toggle_effect)
-        light_button = QPushButton("LIGHT ON / OFF")
-        light_button.clicked.connect(self.toggle_light)
-        detect_button = QPushButton("RE-DETECT")
-        detect_button.clicked.connect(self.redetect)
-        actions.addWidget(self.start_button, 1)
-        actions.addWidget(light_button)
-        actions.addWidget(detect_button)
-        layout.addLayout(actions)
-        footer = QLabel(f"THRASH  •  VERSION {APP_VERSION}  •  PRIVATE, LOCAL HARDWARE CONTROL")
-        footer.setObjectName("hint")
-        footer.setAlignment(Qt.AlignCenter)
-        layout.addWidget(footer)
-        layout.addStretch(1)
-
-    def selected_effect(self):
-        button = self.effect_buttons.checkedButton()
-        return button.property("effect_id") if button else None
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        if not self._has_animated:
-            self._has_animated = True
-            self.setWindowOpacity(0.0)
-            self._entrance_animation = QPropertyAnimation(self, b"windowOpacity", self)
-            self._entrance_animation.setDuration(520)
-            self._entrance_animation.setStartValue(0.0)
-            self._entrance_animation.setEndValue(1.0)
-            self._entrance_animation.setEasingCurve(QEasingCurve.OutCubic)
-            self._entrance_animation.start()
-
-    def _effect_changed(self, _button=None):
-        effect = self.selected_effect()
-        self.reactive_panel.setVisible(effect == "reactive")
-        is_music = bool(effect and effect.startswith("music_"))
-        self.music_panel.setVisible(is_music)
-        is_default = effect == "default"
-        self.default_panel.setVisible(is_default)
-        self.speed_header_widget.setVisible(not is_default)
-        self.speed_slider.setVisible(not is_default)
-        self.speed_title.setText("SENSITIVITY" if is_music else "SPEED")
-        if effect == "music_mic":
-            self.music_hint.setText("DEFAULT MICROPHONE  •  follows nearby sound energy")
-        elif effect == "music_speaker":
-            self.music_hint.setText("BEAT DETECTION  •  adaptive output transients  •  no microphone recording")
-        self._restart_if_running()
-
-    def _speed_changed(self, value):
-        speed = value / 10.0
-        self.speed_label.setText(f"{speed:.1f}x")
-        if self.engine.running:
-            self.engine.speed = speed
-
-    def _restart_if_running(self, _button=None):
-        if self.engine.running:
-            self.start_effect()
-
-    def start_effect(self):
-        if self.ctrl.method != "lenovo_vantage_dll":
-            QMessageBox.warning(self, "Controller unavailable",
-                                "A compatible Lenovo Vantage keyboard interface was not found.")
-            return
-        effect = self.selected_effect()
-        try:
-            self._shown_error = None
-            self.engine.start(
-                effect,
-                self.speed_slider.value() / 10.0,
-                self.react_buttons.checkedId(),
-                self.hold_buttons.checkedId(),
-            )
-            effect_name = next(item["name"] for item in EffectEngine.EFFECTS_META if item["id"] == effect)
-            self.state_label.setText(f"ACTIVE  /  {effect_name.upper()}")
-            self.start_button.setText("STOP MODE")
-            self.start_button.setProperty("running", True)
-            self.start_button.style().unpolish(self.start_button)
-            self.start_button.style().polish(self.start_button)
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not start effect", str(exc))
-
-    def stop_effect(self):
-        self.engine.stop()
-        self.state_label.setText("READY")
-        self.start_button.setText("START MODE")
-        self.start_button.setProperty("running", False)
-        self.start_button.style().unpolish(self.start_button)
-        self.start_button.style().polish(self.start_button)
-
-    def toggle_effect(self):
-        self.stop_effect() if self.engine.running else self.start_effect()
-
-    def _set_startup(self, enabled):
-        try:
-            set_startup_task(enabled)
-            self.state_label.setText("STARTUP  /  ENABLED" if enabled else "STARTUP  /  DISABLED")
-        except Exception as exc:
-            self.startup_checkbox.blockSignals(True)
-            self.startup_checkbox.setChecked(not enabled)
-            self.startup_checkbox.blockSignals(False)
-            QMessageBox.warning(self, "Startup setting failed", str(exc))
-
-    def toggle_light(self):
-        if self.engine.running:
-            self.stop_effect()
-        self.light_on = not self.light_on
-        if self.ctrl.set_backlight(self.light_on):
-            self.state_label.setText("LIGHT  /  ON" if self.light_on else "LIGHT  /  OFF")
-        else:
-            QMessageBox.warning(self, "Controller unavailable", "The keyboard command was not accepted.")
-
-    def redetect(self):
-        if self.engine.running:
-            self.stop_effect()
-        self.ctrl.detect_method()
-        self._refresh_status()
-
-    def _refresh_status(self):
-        status = self.ctrl.get_status()
-        self.method_label.setText(f"{status['system_model']}  •  {status['method_display']}")
-        if status["method"] == "lenovo_vantage_dll":
-            self.connection_dot.setStyleSheet("color: #2dd4bf;")
-        elif status["method"] == "connecting":
-            self.connection_dot.setStyleSheet("color: #fbbf24;")
-        else:
-            self.connection_dot.setStyleSheet("color: #fb7185;")
-        self.music_meter.setValue(int(self.engine.music_level * 100))
-        if self.engine.running and self.engine.current_effect == "default":
-            if self.engine.idle_sleeping:
-                self.state_label.setText("BATTERY SAVER  /  SLEEPING")
-            else:
-                remaining = max(0, 10 - int(self.engine.idle_seconds))
-                self.state_label.setText(f"DEFAULT  /  IDLE SLEEP IN {remaining}s")
-        if self.engine.last_error and self.engine.last_error != self._shown_error:
-            self._shown_error = self.engine.last_error
-            self.state_label.setText("Effect stopped")
-            self.start_button.setText("START MODE")
-            self.start_button.setProperty("running", False)
-            self.start_button.style().unpolish(self.start_button)
-            self.start_button.style().polish(self.start_button)
-            QMessageBox.warning(self, "Effect stopped", self.engine.last_error)
-        if not self.engine.running and (
-            self.state_label.text().startswith("ACTIVE")
-            or self.state_label.text().startswith("DEFAULT")
-            or self.state_label.text().startswith("BATTERY SAVER")
-        ):
-            self.stop_effect()
-
-    def closeEvent(self, event):
-        if not self._quitting and QSystemTrayIcon.isSystemTrayAvailable():
-            event.ignore()
-            self.hide()
-            if not self._tray_notice_shown:
-                self._tray_notice_shown = True
-                self.tray_icon.showMessage(
-                    "Still running",
-                    "Lenovo LOQ Backlit Effects is active in the system tray. Use the tray menu to quit.",
-                    QSystemTrayIcon.Information,
-                    3500,
-                )
-            return
-        self._quit_application()
-        event.accept()
-
-
 class GodModeOverlay(QWidget):
     """Short, original red unlock sequence for the advanced-control reveal."""
 
@@ -2267,8 +1804,7 @@ class DesktopApplication(QMainWindow):
     """Legion-inspired, original desktop shell with progressive disclosure."""
 
     LIGHTING_IDS = {
-        "battery_saver", "breathe", "heartbeat", "disco", "pulse",
-        "binary", "wave", "reactive",
+        "steady", "battery_saver", "breathe", "wave", "reactive",
     }
     AUDIO_IDS = {"music_mic", "music_speaker"}
 
@@ -2540,7 +2076,28 @@ class DesktopApplication(QMainWindow):
         return host
 
     def _lighting_page(self):
-        page, layout = self._page("LIGHTING", "Curated effects with hardware-safe automatic timing.")
+        page, layout = self._page("LIGHTING", "Your keyboard, your workspace. Choose a steady glow or a purposeful rhythm.")
+        summary = GlassFrame("panel")
+        summary_layout = QVBoxLayout(summary)
+        summary_title = QLabel("SINGLE ZONE  /  WHITE BACKLIGHT")
+        summary_title.setObjectName("section")
+        summary_layout.addWidget(summary_title)
+        self.lighting_summary = QLabel("Choose a mode to begin")
+        self.lighting_summary.setObjectName("pageTitle")
+        summary_layout.addWidget(self.lighting_summary)
+        native_note = QLabel("Off · Dim · Bright   /   Effects use the brightness steps available on your keyboard.")
+        native_note.setObjectName("muted")
+        native_note.setWordWrap(True)
+        summary_layout.addWidget(native_note)
+        presets = QHBoxLayout()
+        for label, intensity in [("DIM", 50), ("BRIGHT", 100)]:
+            button = QPushButton(label)
+            button.setAccessibleName(f"Steady {label.lower()} lighting")
+            button.clicked.connect(lambda checked=False, value=intensity: self._native_preset(value))
+            presets.addWidget(button)
+        presets.addStretch()
+        summary_layout.addLayout(presets)
+        layout.addWidget(summary)
         layout.addWidget(self._card_grid(self.LIGHTING_IDS, 3))
         self.battery_note = QLabel("BATTERY SAVER  •  wakes on keyboard or mouse input  •  sleeps after 30 seconds")
         self.battery_note.setObjectName("muted")
@@ -2586,6 +2143,10 @@ class DesktopApplication(QMainWindow):
         self.advanced_widgets.extend([self.advanced_panel])
         layout.addStretch()
         return page
+
+    def _native_preset(self, intensity):
+        self.intensity_slider.setValue(intensity)
+        self._select_effect("steady", activate=True)
 
     def _audio_page(self):
         page, layout = self._page("AUDIO REACTIVE", "Two local audio paths: microphone energy or Windows speaker beats.")
@@ -2716,7 +2277,7 @@ class DesktopApplication(QMainWindow):
         body = QLabel(
             "A community-built controller for compatible Lenovo LOQ white-backlit keyboards.\n\n"
             "Privacy: lighting, keyboard activity, and audio analysis remain on this PC. No recordings or telemetry are uploaded.\n\n"
-            "Compatibility: Lenovo Vantage must expose the supported white-backlight contract. RGB models are intentionally excluded.\n\n"
+            "Compatibility: uses private Lenovo assemblies that may change after Vantage updates. This is a standalone app, not a Vantage plugin. RGB models are excluded.\n\n"
             "Lenovo, LOQ, Legion, ASUS, TUF, and Armoury Crate are trademarks of their respective owners. This project is independent and unaffiliated."
         )
         body.setWordWrap(True)
@@ -3050,6 +2611,8 @@ class DesktopApplication(QMainWindow):
             QMessageBox.warning(self, "Startup setting failed", str(exc))
 
     def _refresh_status(self):
+        effect = next((item["name"] for item in EffectEngine.EFFECTS_META if item["id"] == self.selected_effect()), "Ready")
+        self.lighting_summary.setText(f"{effect}  ·  {'On' if self.light_on else 'Off'}")
         status = self.ctrl.get_status()
         self.method_label.setText(f"{status.get('system_model', 'Lenovo LOQ')}  •  {status.get('method_display', 'Unknown')}")
         method = status.get("method")

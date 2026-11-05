@@ -2,7 +2,7 @@ name: Build Windows application
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/v3.2.0-tray-control-reliability]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -46,10 +46,8 @@ jobs:
         shell: pwsh
         run: |
           $exeHash = (Get-FileHash -Algorithm SHA256 installer-app/ThrashLighteningControl/ThrashLighteningControl.exe).Hash
-          $certHash = (Get-FileHash -Algorithm SHA256 installer/Thrash-Code-Signing.cer).Hash
           @(
-            "$exeHash  LenovoLOQBacklitEffects-Thrash.exe"
-            "$certHash  Thrash-Code-Signing.cer"
+            "$exeHash  ThrashLighteningControl.exe"
           ) | Set-Content -Encoding ascii installer/SHA256SUMS.txt
 
       - name: Install Inno Setup
