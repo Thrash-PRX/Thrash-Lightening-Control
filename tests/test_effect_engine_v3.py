@@ -202,5 +202,23 @@ class EffectEngineV3Tests(unittest.TestCase):
         self.assertLess(first_fade, 0.25)
 
 
+    def test_vantage_discovery_falls_back_to_newest_complete_addin(self):
+        older = os.path.join("Vantage", "1.9.0", "KeyboardContract.dll")
+        newer = os.path.join("Vantage", "2.0.0", "KeyboardContract.dll")
+        folder = os.path.dirname(older)
+        available = {older, os.path.join(folder, "IdeaNotebookAddin.dll"),
+                     os.path.join(folder, "Newtonsoft.Json.dll")}
+        with patch.object(app.glob, "glob", return_value=[older, newer]), patch.object(
+            app.os.path, "isfile", side_effect=lambda path: path in available
+        ):
+            self.assertEqual(app.find_lenovo_dlls()["contract"], older)
+
+    def test_vantage_discovery_rejects_incomplete_only_addin(self):
+        contract = os.path.join("Vantage", "2.0.0", "KeyboardContract.dll")
+        with patch.object(app.glob, "glob", return_value=[contract]), patch.object(
+            app.os.path, "isfile", side_effect=lambda path: path == contract
+        ):
+            self.assertIsNone(app.find_lenovo_dlls())
+
 if __name__ == "__main__":
     unittest.main()
