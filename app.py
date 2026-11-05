@@ -107,7 +107,7 @@ def resource_path(relative_path):
     return os.path.join(base, relative_path)
 
 
-APP_VERSION = "3.1.2"
+APP_VERSION = "3.2.0"
 APP_NAME = "Thrash Lightening Control"
 STARTUP_TASK_NAME = APP_NAME
 STARTUP_RUN_VALUE = APP_NAME
@@ -274,17 +274,18 @@ def set_startup_task(enabled):
 def find_lenovo_dlls():
     """Locate the latest version of Lenovo Vantage's IdeaNotebookAddin DLLs."""
     paths = glob.glob(r"C:\ProgramData\Lenovo\Vantage\Addins\IdeaNotebookAddin\*\KeyboardContract.dll")
-    if paths:
-        def version_key(path):
-            folder_name = os.path.basename(os.path.dirname(path))
-            return tuple(int(part) for part in re.findall(r"\d+", folder_name))
+    def version_key(path):
+        folder_name = os.path.basename(os.path.dirname(path))
+        return tuple(int(part) for part in re.findall(r"\d+", folder_name))
 
-        latest_contract = max(paths, key=version_key)
-        folder = os.path.dirname(latest_contract)
+    # Vantage updates can leave a partially installed newer add-in behind.
+    # Prefer the newest COMPLETE folder instead of rejecting every version.
+    for contract in sorted(paths, key=version_key, reverse=True):
+        folder = os.path.dirname(contract)
         dlls = {
-            "contract": latest_contract,
+            "contract": contract,
             "addin": os.path.join(folder, "IdeaNotebookAddin.dll"),
-            "json": os.path.join(folder, "Newtonsoft.Json.dll")
+            "json": os.path.join(folder, "Newtonsoft.Json.dll"),
         }
         if all(os.path.isfile(path) for path in dlls.values()):
             return dlls
@@ -2308,7 +2309,10 @@ class DesktopApplication(QMainWindow):
         self._build_ui()
         self._build_tray()
         self._apply_god_mode(repaint=True)
-        self._select_effect("battery_saver", activate=False)
+        remembered_effect = self.settings.value("lastEffect", "battery_saver", type=str)
+        if remembered_effect not in self.cards:
+            remembered_effect = "battery_saver"
+        self._select_effect(remembered_effect, activate=False)
         self._ui_ready = True
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._refresh_status)
@@ -2765,11 +2769,38 @@ class DesktopApplication(QMainWindow):
         menu.addAction(open_action)
         menu.addAction(power_action)
         menu.addAction(battery_action)
+        effect_menu = menu.addMenu("Switch Lighting Effect")
+        self.tray_effect_actions = {}
+        self.tray_power_action = power_action
+        for effect in EffectEngine.EFFECTS_META:
+            action = QAction(effect["name"], self)
+            action.setCheckable(True)
+            action.triggered.connect(
+                lambda checked=False, effect_id=effect["id"]: self._activate_tray_effect(effect_id)
+            )
+            effect_menu.addAction(action)
+            self.tray_effect_actions[effect["id"]] = action
         menu.addSeparator()
         menu.addAction(quit_action)
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.activated.connect(self._tray_activated)
         self.tray_icon.show()
+        self._sync_tray_effect_actions()
+
+    def _activate_tray_effect(self, effect_id):
+        """Switch to any supported effect without reopening the main window."""
+        if effect_id in self.cards:
+            self._select_effect(effect_id, activate=True)
+        self._sync_tray_effect_actions()
+
+    def _sync_tray_effect_actions(self):
+        if not hasattr(self, "tray_effect_actions"):
+            return
+        active = self.engine.running and bool(self.power_button.property("powered"))
+        selected = self.selected_effect() if active else None
+        for effect_id, action in self.tray_effect_actions.items():
+            action.setChecked(effect_id == selected)
+        self.tray_power_action.setText("Turn Lighting Off" if active else "Turn Lighting On")
 
     def _select_effect(self, effect_id, activate=False):
         card = self.cards.get(effect_id)
@@ -2800,7 +2831,9 @@ class DesktopApplication(QMainWindow):
             "SPEAKER MODE uses Windows loopback output and adaptive beat transients—not the microphone."
         )
         if self._ui_ready and not self._suppress_effect_start:
+            self.settings.setValue("lastEffect", effect)
             self.start_effect()
+        self._sync_tray_effect_actions()
 
     def _speed_changed(self, value):
         effective = EffectEngine.clamp_speed(self.selected_effect(), value / 10.0)
@@ -2961,6 +2994,7 @@ class DesktopApplication(QMainWindow):
         self.power_button.setProperty("powered", bool(powered))
         self.power_button.style().unpolish(self.power_button)
         self.power_button.style().polish(self.power_button)
+        self._sync_tray_effect_actions()
 
     def stop_effect(self, power_off=True):
         self.engine.stop(restore=not power_off)
