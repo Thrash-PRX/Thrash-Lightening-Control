@@ -1317,6 +1317,12 @@ class GlassFrame(QFrame):
         light = getattr(self.window(), "appearance_mode", "dark") == "light"
         accent = QColor(getattr(self.window(), "active_accent", "#42c8ff"))
         radius = 19 if self.surface in ("sidebar", "panel") else 16
+        if getattr(self.window(), "hub_style", False):
+            painter.setBrush(QColor("#ffffff" if light else "#101010"))
+            painter.setPen(QPen(QColor("#dedede" if light else "#242424"), 1))
+            painter.drawRoundedRect(rect, 24, 24)
+            painter.end()
+            return
 
         shadow_rect = QRectF(rect).translated(0, 2.5)
         painter.setPen(Qt.NoPen)
@@ -1495,6 +1501,12 @@ class EffectCard(QAbstractButton):
             desc_color = QColor("#5c7183" if light_mode else "#8fa3b8")
             icon_color = accent
 
+        if getattr(self.window(), "hub_style", False):
+            background = QColor("#ffffff" if light_mode else "#191919" if self.isChecked() else "#111111")
+            border = QColor("#888888" if self.isChecked() else "#292929")
+            name_color = QColor("#171717" if light_mode else "#ffffff")
+            desc_color = QColor("#666666" if light_mode else "#a1a1aa")
+            icon_color = name_color
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(0, 5, 12, 55 if light_mode else 105))
         painter.drawRoundedRect(QRectF(rect).translated(0, 2), 14, 14)
@@ -1610,6 +1622,9 @@ class AmbientBackground(QWidget):
 
     def _paint_scene(self, painter, width, height, phase):
         painter.setRenderHint(QPainter.Antialiasing)
+        if getattr(self.window(), "hub_style", False):
+            painter.fillRect(QRectF(0, 0, width, height), QColor("#f3f3f3" if self.appearance_mode == "light" else "#0a0a0a"))
+            return
 
         base = QLinearGradient(0, 0, width, height)
         if self.appearance_mode == "light":
@@ -1797,9 +1812,88 @@ class GodModeOverlay(QWidget):
         painter.end()
 
 
-# v3 replaces the original single-page shell above. Keeping the earlier class in
 # this source preserves an easy migration reference while this definition is the
 # one instantiated by the entry point.
+class LOQKeyboardPreview(QWidget):
+    """Responsive LOQ-style ANSI schematic, lit uniformly from cached native state."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(165)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setAccessibleName("Live single-zone LOQ keyboard preview")
+        self.level = 0
+        self.maximum = 2
+        self.available = False
+        self.setToolTip("LOQ-style ANSI schematic with numpad. Physical layouts vary by model and region. All keys share one white lighting zone.")
+
+    @staticmethod
+    def key_layout():
+        rows = [
+            [("Esc", 1)] + [(f"F{i}", 1) for i in range(1, 13)] + [("PrtSc", 1), ("Ins", 1), ("Del", 1)],
+            [("`", 1)] + [(str(i), 1) for i in [1,2,3,4,5,6,7,8,9,0]] + [("-", 1), ("=", 1), ("Back", 2)],
+            [("Tab", 1.5)] + [(k, 1) for k in "QWERTYUIOP"] + [("[", 1), ("]", 1), ("\\", 1.5)],
+            [("Caps", 1.8)] + [(k, 1) for k in "ASDFGHJKL"] + [(";", 1), ("'", 1), ("Enter", 2.2)],
+            [("Shift", 2.3)] + [(k, 1) for k in "ZXCVBNM"] + [(",", 1), (".", 1), ("/", 1), ("Shift", 2.7)],
+            [("Ctrl", 1.3), ("Fn", 1), ("Win", 1), ("Alt", 1), ("", 5.4), ("Alt", 1), ("Ctrl", 1.3), ("←", 1), ("↑↓", 1), ("→", 1)],
+        ]
+        keys = []
+        for row, items in enumerate(rows):
+            x = 0.0
+            scale = 15.0 / sum(width for _, width in items)
+            for label, width in items:
+                keys.append((label, x, row, width * scale, 1))
+                x += width * scale
+        # Distinct numpad with tall plus/enter and a wide zero key.
+        pad = [
+            ("Num",0,1,1,1),("/",1,1,1,1),("*",2,1,1,1),("-",3,1,1,1),
+            ("7",0,2,1,1),("8",1,2,1,1),("9",2,2,1,1),("+",3,2,1,2),
+            ("4",0,3,1,1),("5",1,3,1,1),("6",2,3,1,1),
+            ("1",0,4,1,1),("2",1,4,1,1),("3",2,4,1,1),("Enter",3,4,1,2),
+            ("0",0,5,2,1),(".",2,5,1,1),
+        ]
+        keys.extend((label, 15.5+x, y, w, h) for label,x,y,w,h in pad)
+        return keys
+
+    def set_native_state(self, level, maximum=2, available=True):
+        maximum = max(1, int(maximum))
+        state = (max(0, min(maximum, int(level))), maximum, bool(available))
+        if state != (self.level, self.maximum, self.available):
+            self.level, self.maximum, self.available = state
+            name = "Unavailable" if not self.available else "Off" if self.level == 0 else "Dim" if self.level < self.maximum else "Bright"
+            self.setAccessibleDescription(f"{name}. Single white lighting zone; cached controller state.")
+            self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        width = min(self.width() - 12, 760)
+        unit = width / 19.5
+        height = (self.height() - 26) / 6
+        left = (self.width() - width) / 2
+        glow = self.level / self.maximum if self.available else 0
+        painter.setPen(QPen(QColor(89, 116, 139, 110), 1))
+        painter.setBrush(QColor(5, 10, 17, 225))
+        painter.drawRoundedRect(QRectF(left, 0, width, self.height()-19), 10, 10)
+        for label, x, y, w, h in self.key_layout():
+            rect = QRectF(left + x*unit + 4, y*height + 4, w*unit - 5, h*height - 5)
+            if glow:
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(220, 237, 255, int(12 + glow*24)))
+                painter.drawRoundedRect(rect.adjusted(-1.4, -1.4, 1.4, 1.4), 4, 4)
+            painter.setBrush(QColor(15+int(glow*17), 22+int(glow*17), 31+int(glow*17)))
+            painter.setPen(QPen(QColor(225, 239, 255, int(36 + glow*170)), 0.8))
+            painter.drawRoundedRect(rect, 3, 3)
+            painter.setFont(QFont("Segoe UI", max(5, int(unit*0.16))))
+            painter.setPen(QColor(255,255,255, int(78 + glow*177)))
+            painter.drawText(rect, Qt.AlignCenter, label)
+        painter.setFont(QFont("Segoe UI", 8))
+        painter.setPen(QColor("#92a8bc"))
+        state = "Unavailable" if not self.available else "Off" if self.level == 0 else "Dim" if self.level < self.maximum else "Bright"
+        painter.drawText(QRectF(left, self.height()-18, width, 18), Qt.AlignCenter, f"{state.upper()}  ·  SINGLE WHITE ZONE  ·  LOQ-STYLE ANSI LAYOUT")
+        painter.end()
+
+
 class DesktopApplication(QMainWindow):
     """Legion-inspired, original desktop shell with progressive disclosure."""
 
@@ -1810,6 +1904,7 @@ class DesktopApplication(QMainWindow):
 
     def __init__(self, ctrl, effect_engine, settings=None):
         super().__init__()
+        self.hub_style = True
         self.ctrl = ctrl
         self.engine = effect_engine
         self.settings = settings if settings is not None else QSettings("Thrash", APP_NAME)
@@ -1823,7 +1918,7 @@ class DesktopApplication(QMainWindow):
         self.close_to_tray = self.settings.value("closeToTray", True, type=bool)
         self.animations_enabled = self.settings.value("animations", True, type=bool)
         self.appearance_mode = self.settings.value("appearanceMode", "dark", type=str)
-        self.accent_theme = self.settings.value("accentTheme", "cyan", type=str)
+        self.accent_theme = self.settings.value("accentTheme", "white", type=str)
         self.active_accent = "#42c8ff"
         self.intensity = max(1, min(self.settings.value("intensity", 50, type=int), 100))
         self.engine.idle_timeout = max(10, min(self.settings.value("idleTimeout", 30, type=int), 300))
@@ -1853,6 +1948,9 @@ class DesktopApplication(QMainWindow):
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._refresh_status)
         self.status_timer.start(250)
+        self.preview_timer = QTimer(self)
+        self.preview_timer.timeout.connect(self._refresh_keyboard_preview)
+        self.preview_timer.start(33)
         self._refresh_status()
 
     def _build_ui(self):
@@ -1864,14 +1962,15 @@ class DesktopApplication(QMainWindow):
         self.background = AmbientBackground()
         self.background.set_appearance(self.appearance_mode, self.active_accent)
         self.setCentralWidget(self.background)
-        root = QHBoxLayout(self.background)
+        root = QVBoxLayout(self.background)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(14)
-        root.addWidget(self._make_sidebar())
+        root.addWidget(self._make_header())
+        lower = QHBoxLayout()
+        lower.addWidget(self._make_sidebar())
 
         body = QVBoxLayout()
         body.setSpacing(12)
-        body.addWidget(self._make_header())
         self.pages = QStackedWidget()
         self.pages.addWidget(self._scroll_page(self._lighting_page()))
         self.pages.addWidget(self._scroll_page(self._audio_page()))
@@ -1880,12 +1979,14 @@ class DesktopApplication(QMainWindow):
         self.pages.addWidget(self._scroll_page(self._about_page()))
         body.addWidget(self.pages, 1)
         body.addWidget(self._make_action_bar())
-        root.addLayout(body, 1)
+        root.addWidget(self.preview_panel)
+        lower.addLayout(body, 1)
+        root.addLayout(lower, 1)
         self.god_overlay = GodModeOverlay(self.background)
 
     def _set_theme(self):
-        accents = {"cyan": "#42c8ff", "violet": "#a78bfa", "amber": "#f59e0b", "emerald": "#34d399"}
-        accent = "#ff4055" if self.god_mode else accents.get(self.accent_theme, accents["cyan"])
+        accents = {"white": "#ffffff", "cyan": "#42c8ff", "violet": "#a78bfa", "amber": "#f59e0b", "emerald": "#34d399"}
+        accent = "#ff4055" if self.god_mode else accents.get(self.accent_theme, "#ffffff")
         self.active_accent = accent
         light = self.appearance_mode == "light"
         text = "#17283b" if light else "#eaf1f7"
@@ -1896,11 +1997,11 @@ class DesktopApplication(QMainWindow):
             if light else
             "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(18,31,48,132),stop:1 rgba(3,10,21,76))"
         )
-        button = "rgba(245,250,253,176)" if light else "rgba(18,31,47,176)"
-        hover = "rgba(255,255,255,220)" if light else "rgba(31,49,69,215)"
-        border = "rgba(55,101,130,72)" if light else "rgba(130,184,220,76)"
+        button = "#ffffff" if light else "#161616"
+        hover = "#eeeeee" if light else "#222222"
+        border = "#dddddd" if light else "#27272a"
         accent_color = QColor(accent)
-        nav_selected = f"rgba({accent_color.red()},{accent_color.green()},{accent_color.blue()},42)"
+        nav_selected = "#ffffff" if not light else "#171717"
         self.setStyleSheet(f"""
             QMainWindow {{ background: {'#e9f1f6' if light else '#05070c'}; }}
             QWidget {{ color: {text}; font: 9.5pt 'Segoe UI Variable Text'; }}
@@ -1915,8 +2016,8 @@ class DesktopApplication(QMainWindow):
             QPushButton {{ background: {button}; border: 1px solid {border};
                 border-radius: 11px; padding: 10px 15px; font: 600 9pt 'Segoe UI Variable Text'; }}
             QPushButton:hover {{ border-color: {accent}; background: {hover}; }}
-            QPushButton#nav {{ text-align: left; background: transparent; border: 0; padding: 13px 15px; color: {muted}; }}
-            QPushButton#nav:checked {{ color: {text}; background: {nav_selected}; border-left: 3px solid {accent}; }}
+            QPushButton#nav {{ text-align: left; background: transparent; border: 0; padding: 8px 12px; color: {muted}; }}
+            QPushButton#nav:checked {{ color: {"#111111" if not light else "#ffffff"}; background: {nav_selected}; border-radius: 18px; }}
             QPushButton#primary {{ background: {accent}; color: #05080d; border: 0; font-weight: 750; }}
             QPushButton#primary[running='true'] {{ background: #ff5367; color: #160407; }}
             QPushButton#power {{ min-width:44px; max-width:44px; min-height:44px; max-height:44px; padding:0;
@@ -1946,7 +2047,7 @@ class DesktopApplication(QMainWindow):
         sidebar = GlassFrame("sidebar")
         sidebar.setObjectName("sidebar")
         self.sidebar_panel = sidebar
-        sidebar.setFixedWidth(206)
+        sidebar.setFixedWidth(175)
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(14, 20, 14, 18)
         self.animated_brand = AnimatedBrand(self)
@@ -1978,7 +2079,7 @@ class DesktopApplication(QMainWindow):
         panel = GlassFrame("header")
         panel.setObjectName("status")
         self.header_panel = panel
-        panel.setMinimumHeight(106)
+        panel.setMinimumHeight(80)
         column = QVBoxLayout(panel)
         column.setContentsMargins(20, 13, 16, 12)
         column.setSpacing(5)
@@ -2078,6 +2179,7 @@ class DesktopApplication(QMainWindow):
     def _lighting_page(self):
         page, layout = self._page("LIGHTING", "Your keyboard, your workspace. Choose a steady glow or a purposeful rhythm.")
         summary = GlassFrame("panel")
+        self.preview_panel = summary
         summary_layout = QVBoxLayout(summary)
         summary_title = QLabel("SINGLE ZONE  /  WHITE BACKLIGHT")
         summary_title.setObjectName("section")
@@ -2088,7 +2190,9 @@ class DesktopApplication(QMainWindow):
         native_note = QLabel("Off · Dim · Bright   /   Effects use the brightness steps available on your keyboard.")
         native_note.setObjectName("muted")
         native_note.setWordWrap(True)
-        summary_layout.addWidget(native_note)
+        native_note.hide()
+        self.keyboard_preview = LOQKeyboardPreview()
+        summary_layout.addWidget(self.keyboard_preview)
         presets = QHBoxLayout()
         for label, intensity in [("DIM", 50), ("BRIGHT", 100)]:
             button = QPushButton(label)
@@ -2097,7 +2201,6 @@ class DesktopApplication(QMainWindow):
             presets.addWidget(button)
         presets.addStretch()
         summary_layout.addLayout(presets)
-        layout.addWidget(summary)
         layout.addWidget(self._card_grid(self.LIGHTING_IDS, 3))
         self.battery_note = QLabel("BATTERY SAVER  •  wakes on keyboard or mouse input  •  sleeps after 30 seconds")
         self.battery_note.setObjectName("muted")
@@ -2213,7 +2316,7 @@ class DesktopApplication(QMainWindow):
         appearance_layout.addLayout(mode_row)
         accent_row = QHBoxLayout()
         accent_row.addWidget(QLabel("ACCENT"))
-        for value, label in [("cyan", "Ion"), ("violet", "Nova"), ("amber", "Solar"), ("emerald", "Matrix")]:
+        for value, label in [("white", "Mono"), ("cyan", "Ion"), ("violet", "Nova"), ("amber", "Solar"), ("emerald", "Matrix")]:
             option = QRadioButton(label.upper())
             option.setProperty("accent_value", value)
             option.setChecked(self.accent_theme == value)
@@ -2609,6 +2712,14 @@ class DesktopApplication(QMainWindow):
             self.startup_checkbox.setChecked(not enabled)
             self.startup_checkbox.blockSignals(False)
             QMessageBox.warning(self, "Startup setting failed", str(exc))
+
+    def _refresh_keyboard_preview(self):
+        # Only sample cached state. Never poll the private hardware bridge per frame.
+        if self.isVisible() and not self.isMinimized() and self.keyboard_preview.isVisible():
+            self.keyboard_preview.set_native_state(
+                self.ctrl.current_level, self.ctrl.max_level,
+                self.ctrl.method == "lenovo_vantage_dll",
+            )
 
     def _refresh_status(self):
         effect = next((item["name"] for item in EffectEngine.EFFECTS_META if item["id"] == self.selected_effect()), "Ready")

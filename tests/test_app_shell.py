@@ -79,6 +79,34 @@ class DesktopShellTests(unittest.TestCase):
     def settings_store(self):
         return QSettings(os.path.join(self.settings_directory.name, "preferences.ini"), QSettings.IniFormat)
 
+    def test_keyboard_preview_follows_cached_native_state_without_hardware_poll(self):
+        controller = DummyController()
+        window = self.make_window(controller, DummyEngine())
+        window.show()
+        for level in (0, 1, 2, 0):
+            controller.current_level = level
+            window._refresh_keyboard_preview()
+            self.assertEqual(window.keyboard_preview.level, level)
+            self.assertTrue(window.keyboard_preview.available)
+        controller.max_level = 1
+        controller.current_level = 1
+        window._refresh_keyboard_preview()
+        self.assertEqual(window.keyboard_preview.maximum, 1)
+        controller.method = 'unavailable'
+        window._refresh_keyboard_preview()
+        self.assertFalse(window.keyboard_preview.available)
+        self.assertFalse(controller.levels)
+        window._quit_application()
+
+    def test_keyboard_preview_contains_distinct_numpad_and_single_zone(self):
+        keys = app.LOQKeyboardPreview.key_layout()
+        self.assertGreater(len(keys), 95)
+        self.assertTrue(any(label == 'Enter' and x > 15 and height == 2 for label,x,y,width,height in keys))
+        window = self.make_window(DummyController(), DummyEngine())
+        window.keyboard_preview.set_native_state(2, 2, True)
+        self.assertIn('Bright', window.keyboard_preview.accessibleDescription())
+        window._quit_application()
+
     def test_native_presets_start_steady_and_dashboard_tracks_power(self):
         engine = DummyEngine()
         window = self.make_window(DummyController(), engine)

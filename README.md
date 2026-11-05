@@ -14,7 +14,7 @@
 
 ## v3.2.0 development branch
 
-Native Qt dashboard with a live lighting summary, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The original dashboard work on this branch is preserved.
+URX Hub-inspired native Qt dashboard with a centered live LOQ-style ANSI keyboard and numpad, monochrome panels, a live lighting summary, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The preview samples cached native brightness at 30 Hz while visible, lights every key as one white zone, and shows unavailable state when the bridge is disconnected. It sends no additional hardware commands. Physical layouts vary by model and region.
 
 The focused mode catalog contains Steady, Battery Saver, Breathe, Surge Wave, Reactive, and the two audio modes. Repetitive Heartbeat, Disco, Pulse, and Binary Clock are retired. Existing saved selections for retired modes fall back to Battery Saver without auto-starting.
 
