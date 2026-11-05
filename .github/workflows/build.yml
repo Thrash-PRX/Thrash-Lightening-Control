@@ -38,7 +38,7 @@ jobs:
 
       - name: Render dashboard previews
         env:
-          QT_QPA_PLATFORM: offscreen
+          QT_QPA_PLATFORM: windows
         run: python tests/render_dashboard.py
 
       - name: Build unsigned executable

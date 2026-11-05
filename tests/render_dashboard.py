@@ -14,7 +14,9 @@ with tempfile.TemporaryDirectory() as settings:
     QSettings.setDefaultFormat(QSettings.IniFormat)
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, settings)
     qt = QApplication([])
-    window = app.DesktopApplication(DummyController(), DummyEngine())
+    prefs = QSettings(str(Path(settings) / "preview.ini"), QSettings.IniFormat)
+    prefs.setValue("settingsMigrated", True)
+    window = app.DesktopApplication(DummyController(), DummyEngine(), settings=prefs)
     window.animations_enabled = False
     window.show()
     for width, height in [(1040, 700), (1280, 820)]:

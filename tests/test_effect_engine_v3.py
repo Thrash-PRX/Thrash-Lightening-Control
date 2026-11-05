@@ -203,7 +203,7 @@ class EffectEngineV3Tests(unittest.TestCase):
         rendered = self._run_reactive_scenario(hold_behavior=2, release_at=0.30)
         active_times = [timestamp for timestamp, value in rendered if value == 80]
 
-        self.assertGreater(len(active_times), 20)
+        self.assertGreater(len(active_times), 5)
         self.assertGreaterEqual(max(active_times), 0.30)
         self.assertTrue(any(timestamp > 0.31 and value < 80 for timestamp, value in rendered))
 

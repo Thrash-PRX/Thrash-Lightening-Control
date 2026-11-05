@@ -1808,11 +1808,11 @@ class DesktopApplication(QMainWindow):
     }
     AUDIO_IDS = {"music_mic", "music_speaker"}
 
-    def __init__(self, ctrl, effect_engine):
+    def __init__(self, ctrl, effect_engine, settings=None):
         super().__init__()
         self.ctrl = ctrl
         self.engine = effect_engine
-        self.settings = QSettings("Thrash", APP_NAME)
+        self.settings = settings if settings is not None else QSettings("Thrash", APP_NAME)
         legacy_settings = QSettings("Thrash", "Lenovo LOQ Backlit Effects")
         if not self.settings.contains("settingsMigrated"):
             for key in ("godMode", "closeToTray", "animations", "intensity", "idleTimeout"):

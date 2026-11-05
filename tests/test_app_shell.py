@@ -73,9 +73,15 @@ class DesktopShellTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.settings_directory.cleanup()
 
+    def make_window(self, controller, engine):
+        return app.DesktopApplication(controller, engine, settings=self.settings_store())
+
+    def settings_store(self):
+        return QSettings(os.path.join(self.settings_directory.name, "preferences.ini"), QSettings.IniFormat)
+
     def test_native_presets_start_steady_and_dashboard_tracks_power(self):
         engine = DummyEngine()
-        window = app.DesktopApplication(DummyController(), engine)
+        window = self.make_window(DummyController(), engine)
         window._native_preset(100)
         window._refresh_status()
         self.assertEqual(window.selected_effect(), "steady")
@@ -90,7 +96,7 @@ class DesktopShellTests(unittest.TestCase):
     def test_close_hides_to_tray_and_quit_cleans_up(self):
         controller = DummyController()
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window._tray_notice_shown = True
         window.show()
         self.qt_app.processEvents()
@@ -126,7 +132,7 @@ class DesktopShellTests(unittest.TestCase):
         self.assertEqual(calls, ["task", "run:True"])
 
     def test_normal_mode_hides_all_advanced_controls(self):
-        window = app.DesktopApplication(DummyController(), DummyEngine())
+        window = self.make_window(DummyController(), DummyEngine())
         window.god_checkbox.setChecked(False)
         self.qt_app.processEvents()
         self.assertTrue(all(widget.isHidden() for widget in window.advanced_widgets))
@@ -137,7 +143,7 @@ class DesktopShellTests(unittest.TestCase):
         controller.levels = []
         controller.set_brightness = lambda level: controller.levels.append(level) or True
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window.arm_startup_battery_saver()
         self.assertEqual(controller.levels[-1], 0)
         self.assertEqual(engine.start_calls[-1][0], "battery_saver")
@@ -147,7 +153,7 @@ class DesktopShellTests(unittest.TestCase):
     def test_effect_cards_switch_immediately_with_one_click(self):
         engine = DummyEngine()
         controller = DummyController()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window.cards["breathe"].click()
         self.assertEqual(engine.start_calls[-1][0], "breathe")
         window.cards["wave"].click()
@@ -161,7 +167,7 @@ class DesktopShellTests(unittest.TestCase):
     def test_selecting_effect_while_powered_off_starts_in_one_click(self):
         controller = DummyController()
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window.cards["breathe"].click()
         window.toggle_power()
         self.assertFalse(engine.running)
@@ -176,7 +182,7 @@ class DesktopShellTests(unittest.TestCase):
         window._quit_application()
 
     def test_header_fits_full_title_at_minimum_and_normal_width(self):
-        window = app.DesktopApplication(DummyController(), DummyEngine())
+        window = self.make_window(DummyController(), DummyEngine())
         window.show()
 
         for width in (1040, 1280):
@@ -202,7 +208,7 @@ class DesktopShellTests(unittest.TestCase):
 
     def test_god_mode_reactive_choices_and_speed_apply_live(self):
         engine = DummyEngine()
-        window = app.DesktopApplication(DummyController(), engine)
+        window = self.make_window(DummyController(), engine)
         window.god_mode = True
         window._apply_god_mode()
         window.cards["reactive"].click()
@@ -222,7 +228,7 @@ class DesktopShellTests(unittest.TestCase):
         window._quit_application()
 
     def test_shell_uses_translucent_glass_surfaces(self):
-        window = app.DesktopApplication(DummyController(), DummyEngine())
+        window = self.make_window(DummyController(), DummyEngine())
         self.assertIsInstance(window.header_panel, app.GlassFrame)
         self.assertIsInstance(window.sidebar_panel, app.GlassFrame)
         glass_surfaces = window.findChildren(app.GlassFrame)
@@ -236,7 +242,7 @@ class DesktopShellTests(unittest.TestCase):
     def test_top_right_power_turns_keyboard_fully_off(self):
         controller = DummyController()
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window.cards["breathe"].click()
         window.toggle_power()
         self.assertFalse(engine.running)
@@ -248,7 +254,7 @@ class DesktopShellTests(unittest.TestCase):
     def test_tray_effect_switching_works_without_opening_window(self):
         controller = DummyController()
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         self.assertFalse(window.isVisible())
 
         window.tray_effect_actions["wave"].trigger()
@@ -268,13 +274,13 @@ class DesktopShellTests(unittest.TestCase):
         window._quit_application()
 
     def test_remembers_selected_effect_without_auto_start(self):
-        settings = QSettings("Thrash", app.APP_NAME)
+        settings = self.settings_store()
         had_value = settings.contains("lastEffect")
         previous = settings.value("lastEffect")
         try:
             settings.setValue("lastEffect", "wave")
             engine = DummyEngine()
-            window = app.DesktopApplication(DummyController(), engine)
+            window = self.make_window(DummyController(), engine)
             self.assertEqual(window.selected_effect(), "wave")
             self.assertFalse(engine.start_calls)
 
@@ -283,7 +289,7 @@ class DesktopShellTests(unittest.TestCase):
             window._quit_application()
 
             settings.setValue("lastEffect", "nonexistent")
-            fallback = app.DesktopApplication(DummyController(), DummyEngine())
+            fallback = self.make_window(DummyController(), DummyEngine())
             self.assertEqual(fallback.selected_effect(), "battery_saver")
             fallback._quit_application()
         finally:
