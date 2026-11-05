@@ -1,5 +1,5 @@
 #define MyAppName "Thrash Lightening Control"
-#define MyAppVersion "3.1.2"
+#define MyAppVersion "3.2.0"
 #define MyAppPublisher "Thrash"
 #define MyAppExeName "ThrashLighteningControl.exe"
 
@@ -9,9 +9,9 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL=https://github.com/Thrash-PRX/Lenovo-LOQ-Backlit-Effects-Thrash
-AppSupportURL=https://github.com/Thrash-PRX/Lenovo-LOQ-Backlit-Effects-Thrash/issues
-AppUpdatesURL=https://github.com/Thrash-PRX/Lenovo-LOQ-Backlit-Effects-Thrash/releases
+AppPublisherURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control
+AppSupportURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control/issues
+AppUpdatesURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control/releases
 DefaultDirName={autopf}\Thrash\Thrash Lightening Control
 DefaultGroupName=Thrash Lightening Control
 DisableProgramGroupPage=yes
@@ -37,7 +37,7 @@ VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
-VersionInfoVersion=3.1.2.0
+VersionInfoVersion=3.2.0.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
