@@ -36,6 +36,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: python -m unittest discover -s tests -v
 
+      - name: Render dashboard previews
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python tests/render_dashboard.py
+
       - name: Build unsigned executable
         run: python -m PyInstaller --clean --noconfirm keyboard-effects.spec
 
@@ -56,6 +61,19 @@ jobs:
       - name: Build unsigned compressed installer
         run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss'
 
+      - name: Smoke-test installer and uninstaller
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "ThrashInstallerSmoke"
+          $setup = Start-Process -FilePath "installer-dist/ThrashLighteningControl-Setup-v3.2.0.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$target`"") -Wait -PassThru -WindowStyle Hidden
+          if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
+          if (!(Test-Path "$target/ThrashLighteningControl.exe")) { throw "Installed executable missing" }
+          $expected = ((Get-Content "$target/Verification/SHA256SUMS.txt") -split '\s+')[0]
+          if ((Get-FileHash "$target/ThrashLighteningControl.exe").Hash -ne $expected) { throw "Installed executable hash mismatch" }
+          $remove = Start-Process -FilePath "$target/unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru -WindowStyle Hidden
+          if ($remove.ExitCode -ne 0) { throw "Uninstaller failed" }
+          if (Test-Path "$target/ThrashLighteningControl.exe") { throw "Executable remains after uninstall" }
+
       - name: Hash packaged installer
         shell: pwsh
         run: |
@@ -68,6 +86,7 @@ jobs:
         with:
           name: ThrashLighteningControl-v3.2.0-unsigned
           path: |
+            ui-preview-*.png
             dist/ThrashLighteningControl.exe
             installer-dist/ThrashLighteningControl-Setup-v3.2.0.exe
             installer-dist/SHA256SUMS.txt
