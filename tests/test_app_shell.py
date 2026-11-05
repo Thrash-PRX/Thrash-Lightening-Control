@@ -231,5 +231,52 @@ class DesktopShellTests(unittest.TestCase):
         window._quit_application()
 
 
+    def test_tray_effect_switching_works_without_opening_window(self):
+        controller = DummyController()
+        engine = DummyEngine()
+        window = app.DesktopApplication(controller, engine)
+        self.assertFalse(window.isVisible())
+
+        window.tray_effect_actions["wave"].trigger()
+        self.assertEqual(window.selected_effect(), "wave")
+        self.assertEqual(engine.start_calls[-1][0], "wave")
+        self.assertTrue(window.tray_effect_actions["wave"].isChecked())
+        self.assertEqual(window.tray_power_action.text(), "Turn Lighting Off")
+
+        window.tray_effect_actions["reactive"].trigger()
+        self.assertEqual(engine.start_calls[-1][0], "reactive")
+        self.assertFalse(window.tray_effect_actions["wave"].isChecked())
+        self.assertTrue(window.tray_effect_actions["reactive"].isChecked())
+
+        window.toggle_power()
+        self.assertEqual(window.tray_power_action.text(), "Turn Lighting On")
+        self.assertFalse(any(action.isChecked() for action in window.tray_effect_actions.values()))
+        window._quit_application()
+
+    def test_remembers_selected_effect_without_auto_start(self):
+        settings = QSettings("Thrash", app.APP_NAME)
+        had_value = settings.contains("lastEffect")
+        previous = settings.value("lastEffect")
+        try:
+            settings.setValue("lastEffect", "wave")
+            engine = DummyEngine()
+            window = app.DesktopApplication(DummyController(), engine)
+            self.assertEqual(window.selected_effect(), "wave")
+            self.assertFalse(engine.start_calls)
+
+            window.cards["breathe"].click()
+            self.assertEqual(settings.value("lastEffect"), "breathe")
+            window._quit_application()
+
+            settings.setValue("lastEffect", "nonexistent")
+            fallback = app.DesktopApplication(DummyController(), DummyEngine())
+            self.assertEqual(fallback.selected_effect(), "battery_saver")
+            fallback._quit_application()
+        finally:
+            if had_value:
+                settings.setValue("lastEffect", previous)
+            else:
+                settings.remove("lastEffect")
+
 if __name__ == "__main__":
     unittest.main()
