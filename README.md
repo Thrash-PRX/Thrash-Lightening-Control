@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/app-icon.png" width="128" alt="Thrash Lightening Control icon">
+  <img src="assets/app-icon.png" width="128" alt="LOQ LIGHTENING CENTRE icon">
 </p>
 
-<h1 align="center">Thrash Lightening Control</h1>
+<h1 align="center">LOQ LIGHTENING CENTRE</h1>
 
 <p align="center">A native Windows lighting lab for compatible Lenovo LOQ white-backlit keyboards.</p>
 
@@ -12,9 +12,11 @@
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-22c55e">
 </p>
 
+**THRASH · Made by Hanif**
+
 ## v3.2.0 development branch
 
-URX Hub-inspired native Qt dashboard with a centered live LOQ-style ANSI keyboard and numpad, monochrome panels, a live lighting summary, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The preview samples cached native brightness at 30 Hz while visible, lights every key as one white zone, and shows unavailable state when the bridge is disconnected. It sends no additional hardware commands. Physical layouts vary by model and region.
+URX Hub-inspired native Qt dashboard with URX Lighting screen proportions: compact top pills, a large live LOQ keyboard stage, icon rail, and three control panels, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The preview samples cached native brightness at 30 Hz while visible, lights every key as one white zone, and shows unavailable state when the bridge is disconnected. It sends no additional hardware commands. Physical layouts vary by model and region.
 
 The focused mode catalog contains Steady, Battery Saver, Breathe, Surge Wave, Reactive, and the two audio modes. Repetitive Heartbeat, Disco, Pulse, and Binary Clock are retired. Existing saved selections for retired modes fall back to Battery Saver without auto-starting.
 
@@ -63,7 +65,7 @@ Stable releases remain on the repository [Releases](../../releases) page. For v3
 
 When launched by Windows startup, the keyboard begins off. Battery Saver runs quietly in the tray and the first keyboard or mouse input breathes the light up to the user's remembered 1–100 intensity. Mouse movement, clicks, scrolling, and keypresses all reset the timer. After 30 seconds without any of those inputs, it fades out again. The timeout can be changed only in God Mode.
 
-**Run at Windows Startup** creates a current-user Startup apps entry and an elevated on-demand scheduled task named `Thrash Lightening Control`. This avoids leaving a visible console window and lets the entry appear in Task Manager. Turning the option off removes both entries. No Windows service is installed.
+**Run at Windows Startup** creates a current-user Startup apps entry and an elevated on-demand scheduled task with the stable identifier `Thrash Lightening Control`. This avoids leaving a visible console window and lets the entry appear in Task Manager. Turning the option off removes both entries. No Windows service is installed.
 
 ## Audio privacy
 
@@ -92,3 +94,5 @@ See [Troubleshooting](docs/troubleshooting.md), [Contributing](CONTRIBUTING.md),
 Lenovo, LOQ, Legion, IdeaPad, and Lenovo Vantage are trademarks of Lenovo. ASUS, TUF, and Armoury Crate are trademarks of their respective owners. This independent project is not affiliated with or endorsed by those companies, and it does not redistribute Lenovo proprietary DLLs.
 
 Original project code is available under the [MIT License](LICENSE).
+
+Internal executable, preference store, scheduled task and installation directory identifiers remain compatible with previous Thrash installations. Windows product metadata and display names use LOQ LIGHTENING CENTRE.

@@ -1,4 +1,4 @@
-THRASH LIGHTENING CONTROL v3.2.0 - DEVELOPMENT BUILD
+LOQ LIGHTENING CENTRE v3.2.0 - DEVELOPMENT BUILD
 
 Includes the Windows app, verification information, README, MIT license,
 Start menu and optional desktop shortcuts, and uninstaller.

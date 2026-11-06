@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo ================================================
-echo   Thrash Lightening Control - EXE Builder
+echo   LOQ LIGHTENING CENTRE - EXE Builder
 echo ================================================
 echo.
 

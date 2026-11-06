@@ -28,7 +28,7 @@ from PySide6.QtGui import (
     QPainterPath, QPen, QRadialGradient,
 )
 from PySide6.QtWidgets import (
-    QAbstractButton, QApplication, QButtonGroup, QCheckBox, QFrame, QGridLayout, QGroupBox,
+    QAbstractButton, QApplication, QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton, QRadioButton,
     QProgressBar, QScrollArea, QSizePolicy, QSlider, QStackedWidget,
     QSystemTrayIcon, QVBoxLayout, QWidget,
@@ -106,9 +106,9 @@ def resource_path(relative_path):
 
 
 APP_VERSION = "3.2.0"
-APP_NAME = "Thrash Lightening Control"
-STARTUP_TASK_NAME = APP_NAME
-STARTUP_RUN_VALUE = APP_NAME
+APP_NAME = "LOQ LIGHTENING CENTRE"
+STARTUP_TASK_NAME = "Thrash Lightening Control"
+STARTUP_RUN_VALUE = "Thrash Lightening Control"
 STARTUP_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
@@ -166,7 +166,7 @@ def _create_startup_task():
     user_id = f"{domain}\\{username}" if domain else username
     task_xml = f'''<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>Starts Thrash Lightening Control in the notification area.</Description></RegistrationInfo>
+  <RegistrationInfo><Description>Starts LOQ LIGHTENING CENTRE by THRASH in the notification area.</Description></RegistrationInfo>
   <Principals>
     <Principal id="Author">
       <UserId>{xml_escape(user_id)}</UserId>
@@ -1318,6 +1318,9 @@ class GlassFrame(QFrame):
         accent = QColor(getattr(self.window(), "active_accent", "#42c8ff"))
         radius = 19 if self.surface in ("sidebar", "panel") else 16
         if getattr(self.window(), "hub_style", False):
+            if self.surface in ("stage", "topbar"):
+                painter.end()
+                return
             painter.setBrush(QColor("#ffffff" if light else "#101010"))
             painter.setPen(QPen(QColor("#dedede" if light else "#242424"), 1))
             painter.drawRoundedRect(rect, 24, 24)
@@ -1748,7 +1751,7 @@ class BootSplash(QWidget):
         painter.setFont(QFont("Segoe UI Variable Text", 10, QFont.Medium))
         painter.setPen(QColor(164, 205, 231, sub_alpha))
         painter.drawText(QRectF(0, 213, self.width(), 34), Qt.AlignCenter,
-                         "LIGHTENING CONTROL  •  THRASH")
+                         "LOQ LIGHTENING CENTRE  •  THRASH")
 
         track = QRectF(160, 292, 400, 3)
         painter.fillRect(track, QColor(255, 255, 255, 20))
@@ -1871,13 +1874,13 @@ class LOQKeyboardPreview(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        width = min(self.width() - 12, 760)
+        width = min(self.width() - 24, 850)
         unit = width / 19.5
         height = (self.height() - 26) / 6
         left = (self.width() - width) / 2
         glow = self.level / self.maximum if self.available else 0
-        painter.setPen(QPen(QColor(89, 116, 139, 110), 1))
-        painter.setBrush(QColor(5, 10, 17, 225))
+        painter.setPen(QPen(QColor(64, 64, 64, 255), 1))
+        painter.setBrush(QColor(24, 24, 24, 255))
         painter.drawRoundedRect(QRectF(left, 0, width, self.height()-19), 10, 10)
         for label, x, y, w, h in self.key_layout():
             rect = QRectF(left + x*unit + 4, y*height + 4, w*unit - 5, h*height - 5)
@@ -1885,14 +1888,14 @@ class LOQKeyboardPreview(QWidget):
                 painter.setPen(Qt.NoPen)
                 painter.setBrush(QColor(220, 237, 255, int(12 + glow*24)))
                 painter.drawRoundedRect(rect.adjusted(-1.4, -1.4, 1.4, 1.4), 4, 4)
-            painter.setBrush(QColor(15+int(glow*17), 22+int(glow*17), 31+int(glow*17)))
-            painter.setPen(QPen(QColor(225, 239, 255, int(36 + glow*170)), 0.8))
+            painter.setBrush(QColor(15+int(glow*17), 15+int(glow*17), 15+int(glow*17)))
+            painter.setPen(QPen(QColor(225, 225, 225, int(15 + glow*170)), 0.8))
             painter.drawRoundedRect(rect, 3, 3)
             painter.setFont(QFont("Segoe UI", max(5, int(unit*0.16))))
-            painter.setPen(QColor(255,255,255, int(78 + glow*177)))
+            painter.setPen(QColor(255,255,255, int(150 + glow*105)))
             painter.drawText(rect, Qt.AlignCenter, label)
         painter.setFont(QFont("Segoe UI", 8))
-        painter.setPen(QColor("#92a8bc"))
+        painter.setPen(QColor("#a1a1aa"))
         state = "Unavailable" if not self.available else "Off" if self.level == 0 else "Dim" if self.level < self.maximum else "Bright"
         painter.drawText(QRectF(left, self.height()-18, width, 18), Qt.AlignCenter, f"{state.upper()}  ·  SINGLE WHITE ZONE  ·  LOQ-STYLE ANSI LAYOUT")
         painter.end()
@@ -1911,7 +1914,7 @@ class DesktopApplication(QMainWindow):
         self.hub_style = True
         self.ctrl = ctrl
         self.engine = effect_engine
-        self.settings = settings if settings is not None else QSettings("Thrash", APP_NAME)
+        self.settings = settings if settings is not None else QSettings("Thrash", "Thrash Lightening Control")
         legacy_settings = QSettings("Thrash", "Lenovo LOQ Backlit Effects")
         if not self.settings.contains("settingsMigrated"):
             for key in ("godMode", "closeToTray", "animations", "intensity", "idleTimeout"):
@@ -1960,25 +1963,27 @@ class DesktopApplication(QMainWindow):
     def _build_ui(self):
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(resource_path(os.path.join("assets", "app-icon.png"))))
-        self.resize(1280, 820)
+        self.resize(1440, 900)
         self.setMinimumSize(1040, 700)
         self._set_theme()
         self.background = AmbientBackground()
         self.background.set_appearance(self.appearance_mode, self.active_accent)
         self.setCentralWidget(self.background)
         root = QVBoxLayout(self.background)
-        root.setContentsMargins(16, 16, 16, 16)
-        root.setSpacing(14)
+        root.setContentsMargins(24, 16, 24, 16)
+        root.setSpacing(16)
         root.addWidget(self._make_header())
         lower = QHBoxLayout()
         sidebar = self._make_sidebar()
-        sidebar.setMinimumHeight(335)
+        sidebar.setMinimumHeight(300)
         sidebar_scroll = self._scroll_page(sidebar)
-        sidebar_scroll.setFixedWidth(190)
+        sidebar_scroll.setFixedWidth(280)
         lower.addWidget(sidebar_scroll)
 
         body = QVBoxLayout()
         body.setSpacing(12)
+        old_bar = self._make_action_bar()
+        old_bar.hide()
         self.pages = QStackedWidget()
         self.pages.addWidget(self._scroll_page(self._lighting_page()))
         self.pages.addWidget(self._scroll_page(self._audio_page()))
@@ -1986,8 +1991,8 @@ class DesktopApplication(QMainWindow):
         self.pages.addWidget(self._scroll_page(self._settings_page()))
         self.pages.addWidget(self._scroll_page(self._about_page()))
         body.addWidget(self.pages, 1)
-        body.addWidget(self._make_action_bar())
-        root.addWidget(self.preview_panel)
+
+        root.addWidget(self.preview_panel, 1)
         lower.addLayout(body, 1)
         root.addLayout(lower, 1)
         self.god_overlay = GodModeOverlay(self.background)
@@ -1999,7 +2004,7 @@ class DesktopApplication(QMainWindow):
         light = self.appearance_mode == "light"
         text = "#17283b" if light else "#eaf1f7"
         title = "#102035" if light else "#fbfdff"
-        muted = "#5b7083" if light else "#92a8bc"
+        muted = "#5b7083" if light else "#a1a1aa"
         group_gradient = (
             "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,255,255,154),stop:1 rgba(226,241,250,82))"
             if light else
@@ -2014,6 +2019,17 @@ class DesktopApplication(QMainWindow):
             QMainWindow {{ background: {'#e9f1f6' if light else '#05070c'}; }}
             QWidget {{ color: {text}; font: 9.5pt 'Segoe UI Variable Text'; }}
             QLabel {{ background: transparent; }}
+            QLabel#devicePill {{ border:1px solid #222; border-radius:24px; padding:12px 18px; font:600 10pt 'Segoe UI'; }}
+            QLabel#replicaHeading {{ font:700 25pt 'Segoe UI'; color:{title}; }}
+            QLabel#controlHeading {{ font:650 12pt 'Segoe UI'; color:{title}; }}
+            QPushButton#readConfig {{ background:#ffffff; color:#111111; border-radius:20px; padding:14px 20px; }}
+            QPushButton#railIcon {{ width:44px; height:44px; border:0; border-radius:22px; padding:0; background:transparent; color:#a1a1aa; font:18pt 'Segoe UI Symbol'; }}
+            QPushButton#railIcon[selected='true'] {{ background:#ffffff; color:#111111; }}
+            QPushButton#segment {{ border-radius:10px; background:#222222; }}
+            QFrame#whiteSwatch {{ border-radius:10px; background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:1 #323232); }}
+            QComboBox {{ background:#161616; color:#ffffff; border:1px solid #292929; border-radius:9px; padding:12px; min-width:100px; }}
+            QComboBox QAbstractItemView {{ background:#161616; color:#ffffff; selection-background-color:#333333; }}
+
             QLabel#headerTitle {{ color: {title}; }}
             QLabel#title {{ font: 700 24pt 'Segoe UI Variable Display'; color: {title}; }}
             QLabel#pageTitle {{ font: 650 19pt 'Segoe UI Variable Display'; color: {title}; }}
@@ -2022,7 +2038,7 @@ class DesktopApplication(QMainWindow):
             QFrame#sidebar, QFrame#glass, QFrame#status {{ background: transparent; border: 0; }}
             QGroupBox {{ background: {group_gradient}; border: 1px solid {border}; border-radius: 18px; }}
             QPushButton {{ background: {button}; border: 1px solid {border};
-                border-radius: 11px; padding: 10px 15px; font: 600 9pt 'Segoe UI Variable Text'; }}
+                border-radius: 20px; padding: 12px 16px; font: 600 9pt 'Segoe UI Variable Text'; }}
             QPushButton:hover {{ border-color: {accent}; background: {hover}; }}
             QPushButton#nav {{ text-align: left; background: transparent; border: 0; padding: 8px 12px; color: {muted}; }}
             QPushButton#nav:checked {{ color: {"#111111" if not light else "#ffffff"}; background: {nav_selected}; border-radius: 18px; }}
@@ -2040,9 +2056,9 @@ class DesktopApplication(QMainWindow):
             QRadioButton {{ padding: 6px; color: {text}; }}
             QGroupBox {{ margin-top: 12px; padding: 16px 12px 12px; }}
             QGroupBox::title {{ subcontrol-origin: margin; left: 14px; color: {accent}; padding: 0 6px; }}
-            QSlider::groove:horizontal {{ height: 6px; background: #233248; border-radius: 3px; }}
+            QSlider::groove:horizontal {{ height: 18px; background: #27272a; border-radius: 3px; }}
             QSlider::sub-page:horizontal {{ background: {accent}; border-radius: 3px; }}
-            QSlider::handle:horizontal {{ width: 19px; margin: -7px 0; background: #eaf8ff; border: 2px solid {accent}; border-radius: 9px; }}
+            QSlider::handle:horizontal {{ width: 18px; margin: 0px; background: #ffffff; border: 2px solid {accent}; border-radius: 9px; }}
             QProgressBar {{ height: 8px; background: #1e2a3c; border: 0; border-radius: 4px; }}
             QProgressBar::chunk {{ background: {accent}; border-radius: 4px; }}
             QScrollBar:vertical {{ background: transparent; width: 7px; margin: 0; }}
@@ -2057,98 +2073,75 @@ class DesktopApplication(QMainWindow):
 
     def _make_sidebar(self):
         sidebar = GlassFrame("sidebar")
-        sidebar.setObjectName("sidebar")
         self.sidebar_panel = sidebar
-        sidebar.setFixedWidth(175)
-        layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(14, 20, 14, 18)
-        self.animated_brand = AnimatedBrand(self)
-        layout.addWidget(self.animated_brand)
-        edition = QLabel("LIGHTENING CONTROL")
-        edition.setObjectName("muted")
-        layout.addWidget(edition)
-        layout.addSpacing(24)
-        for index, (icon, text) in enumerate([
-            ("◈", "Lighting"), ("♫", "Audio Reactive"), ("▣", "Device"),
-            ("⚙", "Settings"), ("ⓘ", "About"),
-        ]):
-            button = QPushButton(f"{icon}    {text}")
+        sidebar.setFixedWidth(270)
+        row = QHBoxLayout(sidebar)
+        row.setContentsMargins(12, 28, 12, 22)
+        row.setSpacing(14)
+        icons = QVBoxLayout()
+        for icon, title, page in [("▤", "Device",2),("ϟ", "Reactive",0),("☼", "Lighting",0),("♫", "Audio",1),("⚙", "Settings",3),("ⓘ", "About",4)]:
+            button = QPushButton(icon)
+            button.setObjectName("railIcon")
+            button.setFixedSize(44,44)
+            button.setAccessibleName(title)
+            button.setToolTip(title)
+            button.clicked.connect(lambda checked=False, i=page: self.pages.setCurrentIndex(i))
+            if title == "Lighting":
+                button.setProperty("selected", True)
+            icons.addWidget(button)
+        icons.addStretch()
+        row.addLayout(icons)
+        features = QVBoxLayout()
+        for index, text in [(0,"Effects"),(1,"Audio Reactive"),(2,"Device"),(3,"Settings"),(4,"About")]:
+            button = QPushButton(text)
             button.setObjectName("nav")
+            button.setFixedHeight(42)
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, i=index: self.pages.setCurrentIndex(i))
-            self.nav_buttons.addButton(button, index)
-            layout.addWidget(button)
+            self.nav_buttons.addButton(button,index)
+            features.addWidget(button)
             if index == 0:
                 button.setChecked(True)
-        layout.addStretch()
-        self.god_badge = QLabel("GOD MODE  //  ARMED")
-        self.god_badge.setAlignment(Qt.AlignCenter)
-        self.god_badge.setStyleSheet("color:#ff6879; border:1px solid #8f2633; border-radius:10px; padding:8px; font-weight:700;")
-        layout.addWidget(self.god_badge)
+        features.addStretch()
+        self.god_badge = QLabel("ADVANCED")
+        features.addWidget(self.god_badge)
+        row.addLayout(features,1)
         return sidebar
 
     def _make_header(self):
-        panel = GlassFrame("header")
-        panel.setObjectName("status")
+        panel = GlassFrame("topbar")
         self.header_panel = panel
-        panel.setFixedHeight(114)
-        column = QVBoxLayout(panel)
-        column.setContentsMargins(20, 13, 16, 12)
-        column.setSpacing(5)
-
-        title_row = QWidget(panel)
-        title_row.setAttribute(Qt.WA_TranslucentBackground)
-        top = QHBoxLayout(title_row)
-        top.setContentsMargins(0, 0, 0, 0)
-        top.setSpacing(12)
-        identity = QVBoxLayout()
-        identity.setContentsMargins(0, 0, 0, 0)
-        identity.setSpacing(1)
-        self.header_title = ResponsiveTitle("THRASH LIGHTENING CONTROL")
-        identity.addWidget(self.header_title)
-        self.header_subtitle = QLabel("Native white-backlight control  •  private and local")
+        panel.setFixedHeight(54)
+        row = QHBoxLayout(panel)
+        row.setContentsMargins(0, 0, 0, 0)
+        back = QPushButton("‹  Back")
+        back.clicked.connect(lambda: self.pages.setCurrentIndex(2))
+        row.addWidget(back)
+        self.header_title = QLabel("LOQ LIGHTENING CENTRE")
+        self.header_title.setObjectName("devicePill")
+        row.addWidget(self.header_title)
+        row.addStretch()
+        self.header_subtitle = QLabel("THRASH")
         self.header_subtitle.setObjectName("muted")
-        self.header_subtitle.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        self.header_subtitle.setMinimumWidth(0)
-        identity.addWidget(self.header_subtitle)
-        top.addLayout(identity, 1)
-        self.power_button = QPushButton("⏻")
+        row.addWidget(self.header_subtitle)
+        default = QPushButton("Default  ⌄")
+        default.setToolTip("Open lighting preferences")
+        default.clicked.connect(lambda: self.pages.setCurrentIndex(3))
+        row.addWidget(default)
+        read = QPushButton("⟳  Read Config")
+        read.setObjectName("readConfig")
+        read.clicked.connect(self.redetect)
+        row.addWidget(read)
+        self.header_status_cluster = QWidget(panel)
+        self.header_status_cluster.hide()
+        self.connection_dot = QLabel("●", self.header_status_cluster)
+        self.method_label = QLabel("Detecting…", self.header_status_cluster)
+        self.state_label = ElidedLabel("READY", self.header_status_cluster)
+        self.power_button = QPushButton("☼")
         self.power_button.setObjectName("power")
         self.power_button.setProperty("powered", False)
-        self.power_button.setToolTip("Turn the selected lighting effect on or off")
         self.power_button.setAccessibleName("Lighting power")
         self.power_button.clicked.connect(self.toggle_power)
-        top.addWidget(self.power_button, 0, Qt.AlignTop)
-        column.addWidget(title_row)
-
-        status_row = QWidget(panel)
-        status_row.setAttribute(Qt.WA_TranslucentBackground)
-        status = QHBoxLayout(status_row)
-        status.setContentsMargins(0, 0, 0, 0)
-        status.setSpacing(9)
-        self.header_status_cluster = QWidget(status_row)
-        self.header_status_cluster.setAttribute(Qt.WA_TranslucentBackground)
-        self.header_status_cluster.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        cluster = QHBoxLayout(self.header_status_cluster)
-        cluster.setContentsMargins(0, 0, 0, 0)
-        cluster.setSpacing(9)
-        self.connection_dot = QLabel("●")
-        self.connection_dot.setStyleSheet("color:#2dd4bf; font-size:15px;")
-        self.method_label = QLabel("Detecting Lenovo lighting bridge…")
-        self.method_label.setMinimumWidth(0)
-        self.method_label.setMaximumWidth(310)
-        self.method_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        self.state_label = ElidedLabel("READY")
-        self.state_label.setObjectName("statusPill")
-        self.state_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.state_label.setMinimumWidth(150)
-        self.state_label.setMaximumWidth(330)
-        cluster.addWidget(self.connection_dot)
-        cluster.addWidget(self.method_label, 1)
-        cluster.addStretch()
-        cluster.addWidget(self.state_label)
-        status.addWidget(self.header_status_cluster, 1)
-        column.addWidget(status_row)
         return panel
 
     def _scroll_page(self, content):
@@ -2189,6 +2182,89 @@ class DesktopApplication(QMainWindow):
         return host
 
     def _lighting_page(self):
+        legacy = self._legacy_lighting_page()
+        legacy.hide()
+        # Keep the existing effect actions for tray, settings and engine wiring.
+        self.legacy_controls = legacy
+        legacy.setParent(self.background)
+        legacy.hide()
+        self.preview_panel.setParent(None)
+        self.preview_panel.surface = "stage"
+        self.preview_panel.setFixedHeight(358)
+        old = self.preview_panel.layout()
+        while old.count():
+            item = old.takeAt(0)
+            if item.widget():
+                item.widget().hide()
+        self.keyboard_preview.setParent(self.preview_panel)
+        self.keyboard_preview.setMinimumHeight(180)
+        self.keyboard_preview.setMaximumHeight(320)
+        self.keyboard_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.keyboard_preview.show()
+        old.addWidget(self.keyboard_preview,1)
+        power_row = QHBoxLayout()
+        power_row.addStretch()
+        power_row.addWidget(self.power_button)
+        old.addLayout(power_row)
+        page = GlassFrame("panel")
+        box = QVBoxLayout(page)
+        box.setContentsMargins(26, 26, 26, 22)
+        box.setSpacing(24)
+        heading = QLabel("Lighting Effects")
+        heading.setObjectName("replicaHeading")
+        box.addWidget(heading)
+        columns = QHBoxLayout()
+        columns.setSpacing(18)
+        def section(title):
+            panel = GlassFrame("control")
+            column = QVBoxLayout(panel)
+            column.setContentsMargins(24,24,24,24)
+            column.setSpacing(18)
+            label = QLabel(title)
+            label.setObjectName("controlHeading")
+            column.addWidget(label)
+            columns.addWidget(panel,1)
+            return column
+        effects = section("Effect")
+        effects.addWidget(QLabel("ACTIVE EFFECT"))
+        self.effect_combo = QComboBox()
+        self.effect_combo.setAccessibleName("Active lighting effect")
+        for effect in EffectEngine.EFFECTS_META:
+            self.effect_combo.addItem(effect["name"],effect["id"])
+        self.effect_combo.activated.connect(lambda index: self._select_effect(self.effect_combo.itemData(index),activate=True))
+        effects.addWidget(self.effect_combo)
+        effects.addStretch()
+        controls = section("Effect Controls")
+        controls.addWidget(QLabel("EFFECT SPEED"))
+        controls.addWidget(self.speed_label)
+        controls.addWidget(self.speed_slider)
+        self.speed_slider.setToolTip("Enable Advanced controls in Settings to adjust effect speed")
+        controls.addWidget(QLabel("BRIGHTNESS"))
+        controls.addWidget(self.intensity_value)
+        controls.addWidget(self.intensity_slider)
+        controls.addStretch()
+        custom = section("Effect Customization")
+        segment = QHBoxLayout()
+        for title, value in [("Dim",50),("Bright",100)]:
+            button = QPushButton(title)
+            button.setObjectName("segment")
+            button.clicked.connect(lambda checked=False,v=value:self._native_preset(v))
+            segment.addWidget(button)
+        custom.addLayout(segment)
+        custom.addWidget(QLabel("WHITE BACKLIGHT"))
+        swatch = QFrame()
+        swatch.setObjectName("whiteSwatch")
+        swatch.setFixedSize(138,110)
+        custom.addWidget(swatch)
+        zone = QLabel("Single zone")
+        zone.setObjectName("muted")
+        custom.addWidget(zone)
+        custom.addStretch()
+        box.addLayout(columns,1)
+        box.addWidget(self.advanced_panel)
+        return page
+
+    def _legacy_lighting_page(self):
         page, layout = self._page("LIGHTING", "Your keyboard, your workspace. Choose a steady glow or a purposeful rhythm.")
         summary = GlassFrame("panel")
         self.preview_panel = summary
@@ -2387,7 +2463,7 @@ class DesktopApplication(QMainWindow):
         panel = GlassFrame("panel")
         panel.setObjectName("glass")
         box = QVBoxLayout(panel)
-        title = QLabel("T//  THRASH LIGHTENING CONTROL")
+        title = QLabel("LOQ LIGHTENING CENTRE")
         title.setObjectName("title")
         body = QLabel(
             "A community-built controller for compatible Lenovo LOQ white-backlit keyboards.\n\n"
@@ -2398,7 +2474,7 @@ class DesktopApplication(QMainWindow):
         body.setWordWrap(True)
         body.setObjectName("muted")
         body.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        credits = QLabel("© 2026 THRASH. OPEN-SOURCE COMMUNITY SOFTWARE.")
+        credits = QLabel("THRASH · Made by Hanif · © 2026")
         credits.setObjectName("section")
         box.addWidget(title)
         box.addWidget(body)
@@ -2492,6 +2568,8 @@ class DesktopApplication(QMainWindow):
 
     def _effect_changed(self, _checked=False):
         effect = self.selected_effect()
+        if hasattr(self,"effect_combo"):
+            self.effect_combo.setCurrentIndex(self.effect_combo.findData(effect))
         low, high = EffectEngine.SPEED_LIMITS.get(effect, (0.20, 4.00))
         effective = EffectEngine.clamp_speed(effect, self.speed_slider.value() / 10.0)
         self.speed_slider.blockSignals(True)
@@ -2550,6 +2628,7 @@ class DesktopApplication(QMainWindow):
         for widget in self.advanced_widgets:
             widget.setVisible(self.god_mode)
         self.god_badge.setVisible(self.god_mode)
+        self.speed_slider.setEnabled(self.god_mode)
         if hasattr(self, "reactive_options"):
             self.reactive_options.setVisible(self.god_mode and self.selected_effect() == "reactive")
         if not self.god_mode and hasattr(self, "speed_slider"):
@@ -2789,6 +2868,8 @@ class DesktopApplication(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if hasattr(self, "preview_panel"):
+            self.preview_panel.setFixedHeight(max(250, int(self.height() * 0.42) - 20))
         if hasattr(self, "god_overlay"):
             self.god_overlay.setGeometry(self.centralWidget().rect())
 

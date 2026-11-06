@@ -107,6 +107,18 @@ class DesktopShellTests(unittest.TestCase):
         self.assertIn('Bright', window.keyboard_preview.accessibleDescription())
         window._quit_application()
 
+    def test_effect_dropdown_and_tray_stay_synchronized(self):
+        engine = DummyEngine()
+        window = self.make_window(DummyController(),engine)
+        index = window.effect_combo.findData("breathe")
+        window.effect_combo.setCurrentIndex(index)
+        window.effect_combo.activated.emit(index)
+        self.assertEqual(engine.start_calls[-1][0],"breathe")
+        window.tray_effect_actions["reactive"].trigger()
+        self.assertEqual(window.effect_combo.currentData(),"reactive")
+        self.assertEqual(window.windowTitle(),"LOQ LIGHTENING CENTRE")
+        window._quit_application()
+
     def test_native_presets_start_steady_and_dashboard_tracks_power(self):
         engine = DummyEngine()
         window = self.make_window(DummyController(), engine)
@@ -221,7 +233,7 @@ class DesktopShellTests(unittest.TestCase):
             required = metrics.horizontalAdvance(window.header_title.text())
             available = window.header_title.contentsRect().width()
             self.assertLessEqual(required, available + 1, f"title clipped at {width}px")
-            self.assertGreaterEqual(window.header_title.font().pointSizeF(), 15)
+            self.assertGreaterEqual(window.header_title.font().pointSizeF(), 10)
             self.assertGreaterEqual(window.header_title.height(), metrics.height())
             self.assertLessEqual(
                 window.header_panel.minimumSizeHint().width(),

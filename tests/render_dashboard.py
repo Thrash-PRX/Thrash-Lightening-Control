@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory() as settings:
     window = app.DesktopApplication(DummyController(), DummyEngine(), settings=prefs)
     window.animations_enabled = False
     window.show()
-    for width, height in [(1040, 700), (1280, 820)]:
+    for width, height in [(1040, 700), (1280, 820), (1440, 900)]:
         window.resize(width, height)
         qt.processEvents()
         window._refresh_keyboard_preview()

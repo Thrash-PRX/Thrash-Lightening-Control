@@ -65,7 +65,7 @@ jobs:
         shell: pwsh
         run: |
           $target = Join-Path $env:RUNNER_TEMP "ThrashInstallerSmoke"
-          $setup = Start-Process -FilePath "installer-dist/ThrashLighteningControl-Setup-v3.2.0.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$target`"") -Wait -PassThru -WindowStyle Hidden
+          $setup = Start-Process -FilePath "installer-dist/LOQLighteningCentre-Setup-v3.2.0.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$target`"") -Wait -PassThru -WindowStyle Hidden
           if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
           if (!(Test-Path "$target/ThrashLighteningControl.exe")) { throw "Installed executable missing" }
           $expected = ((Get-Content "$target/Verification/SHA256SUMS.txt") -split '\s+')[0]
@@ -77,17 +77,17 @@ jobs:
       - name: Hash packaged installer
         shell: pwsh
         run: |
-          $setup = "installer-dist/ThrashLighteningControl-Setup-v3.2.0.exe"
+          $setup = "installer-dist/LOQLighteningCentre-Setup-v3.2.0.exe"
           $hash = (Get-FileHash -Algorithm SHA256 $setup).Hash
-          "$hash  ThrashLighteningControl-Setup-v3.2.0.exe" | Set-Content -Encoding ascii installer-dist/SHA256SUMS.txt
+          "$hash  LOQLighteningCentre-Setup-v3.2.0.exe" | Set-Content -Encoding ascii installer-dist/SHA256SUMS.txt
 
       - name: Upload unsigned builds
         uses: actions/upload-artifact@v4
         with:
-          name: ThrashLighteningControl-v3.2.0-unsigned
+          name: LOQLighteningCentre-v3.2.0-unsigned
           path: |
             ui-preview-*.png
             dist/ThrashLighteningControl.exe
-            installer-dist/ThrashLighteningControl-Setup-v3.2.0.exe
+            installer-dist/LOQLighteningCentre-Setup-v3.2.0.exe
             installer-dist/SHA256SUMS.txt
           if-no-files-found: error

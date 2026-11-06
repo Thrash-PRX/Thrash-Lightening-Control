@@ -1,6 +1,6 @@
-#define MyAppName "Thrash Lightening Control"
+#define MyAppName "LOQ LIGHTENING CENTRE"
 #define MyAppVersion "3.2.0"
-#define MyAppPublisher "Thrash"
+#define MyAppPublisher "THRASH"
 #define MyAppExeName "ThrashLighteningControl.exe"
 
 [Setup]
@@ -13,12 +13,12 @@ AppPublisherURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control
 AppSupportURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control/issues
 AppUpdatesURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control/releases
 DefaultDirName={autopf}\Thrash\Thrash Lightening Control
-DefaultGroupName=Thrash Lightening Control
+DefaultGroupName=LOQ LIGHTENING CENTRE
 DisableProgramGroupPage=yes
 LicenseFile=LICENSE
 InfoBeforeFile=installer\INSTALL-NOTES.txt
 OutputDir=installer-dist
-OutputBaseFilename=ThrashLighteningControl-Setup-v{#MyAppVersion}
+OutputBaseFilename=LOQLighteningCentre-Setup-v{#MyAppVersion}
 SetupIconFile=assets\app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}

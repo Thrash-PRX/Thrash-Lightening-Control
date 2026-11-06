@@ -1,4 +1,4 @@
-# Thrash Lightening Control v3.1.2
+# LOQ LIGHTENING CENTRE v3.1.2
 
 This patch adds full keyboard-and-mouse activity tracking to the rebuilt lighting engine and liquid-glass Windows interface.
 
@@ -23,7 +23,7 @@ This patch adds full keyboard-and-mouse activity tracking to the rebuilt lightin
 
 ## Release assets
 
-- `ThrashLighteningControl-Setup-v3.1.2.exe` — signed compressed Windows installer
+- `LOQLighteningCentre-Setup-v3.1.2.exe` — signed compressed Windows installer
 - `SHA256SUMS.txt` — installer integrity checksum
 
 ## Hardware reality
