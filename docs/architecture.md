@@ -32,14 +32,15 @@ The helper is created with `CREATE_NO_WINDOW`, receives only fixed brightness to
 
 Effects execute on a daemon worker thread. The controller serializes hardware writes with a lock. Stopping an effect signals an event, joins the worker, closes effect-specific audio resources, and restores the nearest native level for the selected intensity.
 
-Lenovo's white-backlight contract exposes either one or two illuminated levels plus off. The 1–100 control sets an effect envelope, quantized to native states with hysteresis. Breathe and Wave sample at 30 Hz and send only changes. Steady holds the nearest illuminated state. No software PWM is sent over IPC; fades remain discrete hardware steps.
+Lenovo's white-backlight contract exposes either one or two illuminated levels plus off. The 1–100 control sets an effect envelope, quantized to native states with hysteresis. Breathe and the Focus Timer reminder sample at 30 Hz and send only changes. Steady holds the nearest illuminated state. No software PWM is sent over IPC; fades remain discrete hardware steps.
 
-## Audio modes
+## Audio and preview
 
-- Music · Mic uses `sounddevice.RawInputStream` with 16-bit mono input. RMS is calculated in memory.
-- Music · Speaker uses `IAudioMeterInformation::GetPeakValue` on the current Windows render endpoint through `pycaw`.
+Speaker Beats uses Core Audio endpoint peak metering only. No microphone path or sounddevice dependency remains.
 
-Microphone energy uses adaptive floor/peak normalization. Speaker mode compares fast and slow output envelopes to identify sudden beat-like attacks, applies a short adaptive cooldown, and turns each onset into a bright/dim pulse. Core Audio exposes only the endpoint peak here, so no speaker samples are captured or stored.
+The 3D preview is a procedural LOQ-inspired mesh drawn through Qt's existing painter: chassis, lid, screen and raised keycaps have actual 3D coordinates, camera projection and depth ordering. Orbit, zoom and reset are available through pointer, keyboard and buttons. It is an illustrative model, not official CAD. Its white key surface uses cached native controller state and adds no hardware calls. No webview, external 3D engine or continuous auto-rotation is used.
+
+Focus Timer uses a monotonic 30-minute cycle to avoid wall-clock adjustments altering intervals. Night Shift uses local wall-clock hour for its 22:00–07:00 brightness schedule. New selections reset focus timing.
 
 ## Battery saver and startup
 

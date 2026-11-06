@@ -33,4 +33,7 @@ with tempfile.TemporaryDirectory() as settings:
         window._refresh_keyboard_preview()
         qt.processEvents()
         assert window.grab().save(f"ui-preview-native-{level}.png")
+    window.keyboard_preview.orbit(115,0)
+    qt.processEvents()
+    assert window.grab().save("ui-preview-3d-rotated.png")
     window._quit_application()

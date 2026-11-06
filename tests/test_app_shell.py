@@ -98,29 +98,52 @@ class DesktopShellTests(unittest.TestCase):
         self.assertFalse(controller.levels)
         window._quit_application()
 
-    def test_device_photo_states_only_change_keyboard_zone(self):
+    def test_3d_preview_orbits_resets_and_retains_live_state(self):
+        from PySide6.QtTest import QTest
+        from PySide6.QtCore import QPoint
         window = self.make_window(DummyController(),DummyEngine())
-        preview = window.keyboard_preview
-        self.assertFalse(preview._device.isNull())
-        dark = preview._states[0].toImage()
-        bright = preview._states[2].toImage()
-        changed = 0
-        for y in range(dark.height()):
-            for x in range(dark.width()):
-                if dark.pixel(x,y) != bright.pixel(x,y):
-                    changed += 1
-                    self.assertTrue(preview._zone.contains(app.QPointF(x+0.5,y+0.5)))
-        self.assertGreater(changed,1000)
-        preview.set_native_state(1,1,True)
-        self.assertEqual(preview.state_name(),"Bright")
-        window.resize(1280,820)
+        window.animations_enabled = False
         window.show()
         self.qt_app.processEvents()
-        self.assertTrue(window.sidebar_features.isHidden())
-        window.resize(1440,900)
-        self.qt_app.processEvents()
-        self.assertFalse(window.sidebar_features.isHidden())
+        preview = window.keyboard_preview
+        preview.set_native_state(2,2,True)
+        before = preview.grab().toImage()
+        QTest.keyClick(preview,Qt.Key_Right)
+        self.assertNotEqual(preview.yaw,preview.DEFAULT_VIEW[0])
+        self.assertNotEqual(before,preview.grab().toImage())
+        self.assertEqual(preview.state_name(),"Bright")
+        QTest.mouseDClick(preview,Qt.LeftButton,pos=QPoint(100,100))
+        self.assertEqual((preview.yaw,preview.pitch,preview.zoom),preview.DEFAULT_VIEW)
+        self.assertEqual(before,preview.grab().toImage())
+        QTest.mousePress(preview,Qt.LeftButton,pos=QPoint(100,100))
+        QTest.mouseMove(preview,QPoint(140,115))
+        QTest.mouseRelease(preview,Qt.LeftButton,pos=QPoint(140,115))
+        self.assertNotEqual(preview.yaw,preview.DEFAULT_VIEW[0])
+        from PySide6.QtGui import QWheelEvent
+        wheel = QWheelEvent(app.QPointF(100,100),app.QPointF(100,100),QPoint(),QPoint(0,120),Qt.NoButton,Qt.NoModifier,Qt.NoScrollPhase,False)
+        self.qt_app.sendEvent(preview,wheel)
+        self.assertGreater(preview.zoom,1.0)
+        preview.reset_view()
+        for yaw in range(0,360,45):
+            preview.yaw=yaw
+            for point in [(-3.7,-2.6,0),(3.7,2.6,0),(0,-4,4.6)]:
+                projected,depth=preview.project(point)
+                self.assertTrue(app.math.isfinite(projected.x()))
+                self.assertTrue(app.math.isfinite(projected.y()))
+        preview.set_native_state(1,1,True)
+        self.assertEqual(preview.state_name(),"Bright")
         window._quit_application()
+
+    def test_retired_effect_preferences_migrate_without_starting(self):
+        settings = self.settings_store()
+        for retired,replacement in [("wave","breathe"),("music_mic","music_speaker")]:
+            settings.setValue("lastEffect",retired)
+            engine = DummyEngine()
+            window = self.make_window(DummyController(),engine)
+            self.assertEqual(window.selected_effect(),replacement)
+            self.assertFalse(engine.start_calls)
+            window._quit_application()
+        settings.remove("lastEffect")
 
     def test_effect_dropdown_and_tray_stay_synchronized(self):
         engine = DummyEngine()
@@ -231,9 +254,9 @@ class DesktopShellTests(unittest.TestCase):
         window = self.make_window(controller, engine)
         window.cards["breathe"].click()
         self.assertEqual(engine.start_calls[-1][0], "breathe")
-        window.cards["wave"].click()
-        self.assertEqual(engine.start_calls[-1][0], "wave")
-        self.assertEqual([call[0] for call in engine.start_calls[-2:]], ["breathe", "wave"])
+        window.cards["night_shift"].click()
+        self.assertEqual(engine.start_calls[-1][0], "night_shift")
+        self.assertEqual([call[0] for call in engine.start_calls[-2:]], ["breathe", "night_shift"])
         self.assertEqual(engine.stop_calls, 0)
         self.assertNotIn(0, controller.levels)
         self.assertTrue(window.power_button.property("powered"))
@@ -248,10 +271,10 @@ class DesktopShellTests(unittest.TestCase):
         self.assertFalse(engine.running)
         controller.levels.clear()
 
-        window.cards["wave"].click()
+        window.cards["night_shift"].click()
 
         self.assertTrue(engine.running)
-        self.assertEqual(engine.start_calls[-1][0], "wave")
+        self.assertEqual(engine.start_calls[-1][0], "night_shift")
         self.assertTrue(window.power_button.property("powered"))
         self.assertNotIn(0, controller.levels)
         window._quit_application()
@@ -333,15 +356,15 @@ class DesktopShellTests(unittest.TestCase):
         window = self.make_window(controller, engine)
         self.assertFalse(window.isVisible())
 
-        window.tray_effect_actions["wave"].trigger()
-        self.assertEqual(window.selected_effect(), "wave")
-        self.assertEqual(engine.start_calls[-1][0], "wave")
-        self.assertTrue(window.tray_effect_actions["wave"].isChecked())
+        window.tray_effect_actions["night_shift"].trigger()
+        self.assertEqual(window.selected_effect(), "night_shift")
+        self.assertEqual(engine.start_calls[-1][0], "night_shift")
+        self.assertTrue(window.tray_effect_actions["night_shift"].isChecked())
         self.assertEqual(window.tray_power_action.text(), "Turn Lighting Off")
 
         window.tray_effect_actions["reactive"].trigger()
         self.assertEqual(engine.start_calls[-1][0], "reactive")
-        self.assertFalse(window.tray_effect_actions["wave"].isChecked())
+        self.assertFalse(window.tray_effect_actions["night_shift"].isChecked())
         self.assertTrue(window.tray_effect_actions["reactive"].isChecked())
 
         window.toggle_power()
@@ -354,10 +377,10 @@ class DesktopShellTests(unittest.TestCase):
         had_value = settings.contains("lastEffect")
         previous = settings.value("lastEffect")
         try:
-            settings.setValue("lastEffect", "wave")
+            settings.setValue("lastEffect", "night_shift")
             engine = DummyEngine()
             window = self.make_window(DummyController(), engine)
-            self.assertEqual(window.selected_effect(), "wave")
+            self.assertEqual(window.selected_effect(), "night_shift")
             self.assertFalse(engine.start_calls)
 
             window.cards["breathe"].click()

@@ -34,6 +34,8 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QVBoxLayout, QWidget, QGraphicsOpacityEffect,
 )
 
+from keyboard_preview_3d import LOQKeyboardPreview
+
 # Define hook-related types and signatures for ctypes
 WH_KEYBOARD_LL = 13
 WM_KEYDOWN = 0x0100
@@ -594,28 +596,21 @@ class EffectEngine:
     EFFECTS_META = [
         {"id": "steady", "name": "Steady", "icon": "☀", "desc": "Constant native brightness for focused work"},
         {"id": "battery_saver", "name": "Battery Saver", "icon": "◉",  "desc": "Wakes on input, sleeps after 30 seconds"},
-        {"id": "breathe",   "name": "Breathe",        "icon": "◌",     "desc": "Slow, symmetrical soft breathing"},
-        {"id": "wave",      "name": "Surge Wave",     "icon": "≈",     "desc": "Fast crest with a long trailing ripple"},
+        {"id": "breathe",   "name": "Calm Breathe",        "icon": "◌",     "desc": "Slow, symmetrical soft breathing"},
+        {"id": "focus_timer", "name": "Focus Timer", "icon": "◷", "desc": "25-minute focus, gentle reminder, 5-minute dark break"},
+        {"id": "night_shift", "name": "Night Shift", "icon": "☾", "desc": "Dim from 10 PM to 7 AM; normal brightness by day"},
         {"id": "reactive",  "name": "Reactive",       "icon": "⌨",     "desc": "Brightens on every keypress"},
-        {"id": "music_mic", "name": "Music / Mic",    "icon": "♪",     "desc": "Follows the default microphone"},
-        {"id": "music_speaker", "name": "Music / Speaker", "icon": "♫", "desc": "Beat detection from speaker output"},
+        {"id": "music_speaker", "name": "Speaker Beats", "icon": "♫", "desc": "Beat detection from speaker output"},
     ]
 
     RECOMMENDED_SPEEDS = {
         "battery_saver": 1.0,
         "breathe": 1.0,
-        "heartbeat": 1.0,
-        "disco": 0.72,
-        "pulse": 1.0,
-        "binary": 1.0,
-        "wave": 0.9,
         "reactive": 1.0,
-        "music_mic": 1.15,
         "music_speaker": 1.35,
     }
     SPEED_LIMITS = {
         "breathe": (0.45, 1.65),
-        "wave": (0.55, 2.20),
         "reactive": (0.55, 2.00),
     }
 
@@ -628,6 +623,8 @@ class EffectEngine:
         self.ctrl = ctrl
         self.running = False
         self.current_effect = None
+        self._focus_started = time.monotonic()
+        self.effect_status = ""
         self.speed = 1.0
         self.intensity = 50
         self.mode = 2
@@ -649,9 +646,6 @@ class EffectEngine:
         self._pressed_keys = set()
         self._keypress_counter = 0
         self._keys_lock = threading.Lock()
-        self._music_stream = None
-        self._music_floor = 0.01
-        self._music_peak = 0.05
         self._speaker_meter = None
         self._speaker_device = None
         self._speaker_com_initialized = False
@@ -676,6 +670,8 @@ class EffectEngine:
             raise ValueError(f"Unknown effect: {effect}")
         self.stop(restore=False)
         self.current_effect = effect
+        self._focus_started = time.monotonic()
+        self.effect_status = ""
         recommended = self.RECOMMENDED_SPEEDS.get(effect, 1.0)
         self.speed = self.clamp_speed(effect, recommended if speed is None else speed)
         self.intensity = max(1, min(int(intensity), 100))
@@ -683,8 +679,6 @@ class EffectEngine:
         self.hold_behavior = hold_behavior
         self.start_asleep = bool(start_asleep)
         self.last_error = None
-        self._music_floor = 0.01
-        self._music_peak = 0.05
         self._speaker_fast = 0.0
         self._speaker_slow = 0.0
         self._speaker_deviation = 0.01
@@ -721,7 +715,7 @@ class EffectEngine:
         self._stop_keyboard_hook()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2)
-        self._close_music_stream()
+        self._close_audio()
         if restore:
             target = max(1, int(round((self.intensity / 100.0) * self.ctrl.max_level)))
             self.ctrl.set_brightness(min(self.ctrl.max_level, target))
@@ -736,8 +730,9 @@ class EffectEngine:
             "steady": self._steady,
             "battery_saver": self._battery_saver,
             "breathe": self._breathe,
-            "wave": self._wave, "reactive": self._reactive,
-            "music_mic": self._music_mic,
+            "focus_timer": self._focus_timer,
+            "night_shift": self._night_shift,
+            "reactive": self._reactive,
             "music_speaker": self._music_speaker,
         }
         fn = fns.get(self.current_effect)
@@ -751,7 +746,7 @@ class EffectEngine:
             self.last_error = str(exc)
             print(f"Effect error: {exc}")
         finally:
-            self._close_music_stream()
+            self._close_audio()
             self.running = False
             if not self._stop.is_set():
                 target = max(1, int(round((self.intensity / 100.0) * self.ctrl.max_level)))
@@ -912,6 +907,34 @@ class EffectEngine:
         self._rendered_intensity = self.intensity
         return self._wait(0.10)
 
+    def _night_shift(self):
+        hour = time.localtime().tm_hour
+        maximum = max(1,int(self.ctrl.max_level))
+        level = 1 if hour >= 22 or hour < 7 else max(1,min(maximum,int(self.intensity/100*maximum+0.5)))
+        self.effect_status = "Evening dim · until 7 AM" if hour >= 22 or hour < 7 else "Day brightness · dims at 10 PM"
+        if self.ctrl.current_level != level:
+            self.ctrl.set_brightness(level)
+        return self._wait(1.0)
+
+    def _focus_timer(self):
+        elapsed = max(0,time.monotonic()-self._focus_started) % 1800
+        if elapsed < 1500:
+            remaining = int(math.ceil(1500-elapsed))
+            self.effect_status = f"Focus · {remaining//60:02d}:{remaining%60:02d} remaining"
+            return self._steady()
+        if elapsed < 1506:
+            self.effect_status = "Break reminder · gentle double breathe"
+            phase = ((elapsed-1500) % 3)/3
+            maximum=max(1,int(self.ctrl.max_level))
+            peak=max(1,min(maximum,int(self.intensity/100*maximum+0.5)))*100/maximum
+            self._render_intensity(peak*self._breathe_envelope(phase))
+            return self._wait(1/30)
+        remaining = int(math.ceil(1800-elapsed))
+        self.effect_status = f"Break · {remaining//60:02d}:{remaining%60:02d} remaining"
+        if self.ctrl.current_level != 0:
+            self.ctrl.set_brightness(0)
+        return self._wait(0.5)
+
     def _fade_to(self, target, duration=0.55, start=None):
         """Sine-eased envelope rendered as discrete native brightness steps."""
         start = self._rendered_intensity if start is None else float(start)
@@ -1000,74 +1023,6 @@ class EffectEngine:
                 return True
         return True
 
-    @staticmethod
-    def _wave_envelope(phase):
-        """Single-zone surge: sharp front, held crest, tail, then a smaller ripple."""
-        phase = max(0.0, min(1.0, float(phase)))
-        if phase < 0.12:
-            return math.sin((phase / 0.12) * math.pi / 2) ** 1.35
-        if phase < 0.28:
-            return 1.0
-        if phase < 0.68:
-            tail = (phase - 0.28) / 0.40
-            return 0.10 + 0.90 * (1.0 - tail) ** 2.15
-        if phase < 0.78:
-            ripple = (phase - 0.68) / 0.10
-            return 0.10 + 0.38 * math.sin(ripple * math.pi / 2) ** 1.4
-        if phase < 0.94:
-            ripple_tail = (phase - 0.78) / 0.16
-            return 0.48 * (1.0 - ripple_tail) ** 1.8
-        return 0.0
-
-    def _wave(self):
-        """A visibly asymmetric surge and secondary ripple for one lighting zone."""
-        frame = 1.0 / 30.0
-        deadline = time.monotonic()
-        previous = deadline
-        phase = 0.0
-        while self.running:
-            now = time.monotonic()
-            phase = (phase + (now - previous) * self.speed / 3.6) % 1.0
-            previous = now
-            self._render_intensity(self.intensity * self._wave_envelope(phase))
-            deadline += frame
-            delay = deadline - time.monotonic()
-            if delay <= 0:
-                deadline = time.monotonic() + frame
-                delay = frame
-            if self._wait(delay):
-                return True
-        return True
-
-    def _music_mic(self):
-        """Map default-microphone loudness to the keyboard's three brightness levels."""
-        if self._music_stream is None:
-            try:
-                import sounddevice as sd
-            except ImportError as exc:
-                raise RuntimeError("Music mode requires the bundled sounddevice component") from exc
-            try:
-                self._music_stream = sd.RawInputStream(
-                    samplerate=44100,
-                    blocksize=1024,
-                    channels=1,
-                    dtype="int16",
-                )
-                self._music_stream.start()
-            except Exception as exc:
-                self._close_music_stream()
-                raise RuntimeError(f"Could not open the default microphone: {exc}") from exc
-
-        data, _overflowed = self._music_stream.read(1024)
-        samples = memoryview(data).cast("h")
-        if not samples:
-            return False
-
-        mean_square = sum(sample * sample for sample in samples) / len(samples)
-        rms = (mean_square ** 0.5) / 32768.0
-        self._apply_music_intensity(rms)
-        return False
-
     def _music_speaker(self):
         """Detect beat-like output transients without opening the microphone."""
         if self._speaker_meter is None:
@@ -1085,7 +1040,7 @@ class EffectEngine:
                 )
                 self._speaker_meter = cast(interface, POINTER(IAudioMeterInformation))
             except Exception as exc:
-                self._close_music_stream()
+                self._close_audio()
                 raise RuntimeError(f"Could not monitor Windows speaker output: {exc}") from exc
 
         peak = float(self._speaker_meter.GetPeakValue())
@@ -1134,31 +1089,7 @@ class EffectEngine:
         self._render_intensity(output_intensity)
         return is_beat
 
-    def _apply_music_intensity(self, raw_level):
-        """Normalize either microphone RMS or speaker peak into three hardware levels."""
-        raw_level = max(0.0, min(1.0, float(raw_level)))
-
-        # Slowly learn the room noise floor and decay the recent peak. This keeps
-        # the three available backlight levels responsive across different sources.
-        if raw_level < self._music_floor * 1.8:
-            self._music_floor = self._music_floor * 0.98 + raw_level * 0.02
-        self._music_peak = max(raw_level, self._music_peak * 0.965, self._music_floor + 0.015)
-        span = max(0.015, self._music_peak - self._music_floor)
-        sensitivity = 0.65 + self.speed * 0.55
-        intensity = max(0.0, min(1.0, ((raw_level - self._music_floor) / span) * sensitivity))
-        self.music_level = self.music_level * 0.45 + intensity * 0.55
-
-        self._render_intensity(self.intensity * self.music_level)
-
-    def _close_music_stream(self):
-        stream = self._music_stream
-        self._music_stream = None
-        if stream is not None:
-            try:
-                stream.stop()
-                stream.close()
-            except Exception:
-                pass
+    def _close_audio(self):
         self._speaker_meter = None
         self._speaker_device = None
         if self._speaker_com_initialized:
@@ -1866,94 +1797,13 @@ class GodModeOverlay(QWidget):
 
 # this source preserves an easy migration reference while this definition is the
 # one instantiated by the entry point.
-class LOQKeyboardPreview(QWidget):
-    """User-supplied device photo with a cached single-zone keyboard overlay."""
-    SOURCE = QRectF(24, 64, 254, 174)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedHeight(165)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setAccessibleName("Live LOQ device effect preview")
-        self.level, self.maximum, self.available = 0, 2, False
-        self._device = QPixmap(resource_path("assets/loq-device.png"))
-        if self._device.isNull():
-            raise RuntimeError("The LOQ device preview asset is missing")
-        self._zone = self.keyboard_zone()
-        self._states = self._build_states()
-        self.setToolTip("Your supplied LOQ image. The keyboard is one white lighting zone; the screen and palm rest do not animate.")
-
-    @staticmethod
-    def keyboard_zone():
-        # Source-image coordinates: keyboard block, numpad and lowered arrow cluster.
-        path = QPainterPath()
-        path.moveTo(56,122)
-        for x,y in [(245,122),(245,181),(212,181),(212,193),(174,193),(174,182),(56,182)]:
-            path.lineTo(x,y)
-        path.closeSubpath()
-        return path
-
-    def _build_states(self):
-        image = self._device.toImage()
-        legends = QImage(image.size(),QImage.Format_ARGB32_Premultiplied)
-        legends.fill(Qt.transparent)
-        # Build once, not per animation frame. Brightness follows the original key detail.
-        for y in range(122,194):
-            for x in range(56,246):
-                if not self._zone.contains(QPointF(x+0.5,y+0.5)):
-                    continue
-                color = image.pixelColor(x,y)
-                luminance = (color.red()*0.2126 + color.green()*0.7152 + color.blue()*0.0722)
-                alpha = int(max(0,min(180,(luminance-85)*1.8)))
-                legends.setPixelColor(x,y,QColor(255,255,255,alpha))
-        states = {}
-        for level in (0,1,2):
-            frame = self._device.copy()
-            painter = QPainter(frame)
-            painter.setClipPath(self._zone)
-            if level < 2:
-                painter.fillPath(self._zone,QColor(0,0,0,170 if level == 0 else 65))
-            else:
-                painter.drawImage(0,0,legends)
-                painter.fillPath(self._zone,QColor(255,255,255,12))
-            painter.end()
-            states[level] = frame
-        return states
-
-    def set_native_state(self, level, maximum=2, available=True):
-        maximum = max(1,int(maximum))
-        state = (max(0,min(maximum,int(level))),maximum,bool(available))
-        if state != (self.level,self.maximum,self.available):
-            self.level,self.maximum,self.available = state
-            self.setAccessibleDescription(f"{self.state_name()}. Single white lighting zone; cached controller state.")
-            self.update()
-
-    def state_name(self):
-        return "Unavailable" if not self.available else "Off" if self.level == 0 else "Dim" if self.level < self.maximum else "Bright"
-
-    def paintEvent(self,event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        source = self.SOURCE
-        scale = min((self.width()-24)/source.width(),max(1,self.height()-28)/source.height())
-        width,height = source.width()*scale,source.height()*scale
-        target = QRectF((self.width()-width)/2,0,width,height)
-        level = 0 if not self.available else 0 if self.level == 0 else 2 if self.level == self.maximum else 1
-        painter.drawPixmap(target,self._states[level],source)
-        painter.setPen(QColor("#a1a1aa"))
-        painter.setFont(QFont("Segoe UI",8))
-        painter.drawText(QRectF(0,self.height()-22,self.width(),20),Qt.AlignCenter,
-                         f"LOQ  ·  {self.state_name().upper()}  ·  SINGLE WHITE ZONE")
-        painter.end()
-
-
 class DesktopApplication(QMainWindow):
     """Legion-inspired, original desktop shell with progressive disclosure."""
 
     LIGHTING_IDS = {
-        "steady", "battery_saver", "breathe", "wave", "reactive",
+        "steady", "battery_saver", "breathe", "focus_timer", "night_shift", "reactive",
     }
-    AUDIO_IDS = {"music_mic", "music_speaker"}
+    AUDIO_IDS = {"music_speaker"}
 
     def __init__(self, ctrl, effect_engine, settings=None):
         super().__init__()
@@ -1994,6 +1844,7 @@ class DesktopApplication(QMainWindow):
         self._build_tray()
         self._apply_god_mode(repaint=True)
         remembered_effect = self.settings.value("lastEffect", "battery_saver", type=str)
+        remembered_effect = {"wave":"breathe", "music_mic":"music_speaker"}.get(remembered_effect,remembered_effect)
         if remembered_effect not in self.cards:
             remembered_effect = "battery_saver"
         self._select_effect(remembered_effect, activate=False)
@@ -2277,6 +2128,11 @@ class DesktopApplication(QMainWindow):
         old.addWidget(self.keyboard_preview,1)
         power_row = QHBoxLayout()
         power_row.addStretch()
+        for title,action in [("↶",lambda:self.keyboard_preview.orbit(-15,0)),("Reset view",self.keyboard_preview.reset_view),("↷",lambda:self.keyboard_preview.orbit(15,0))]:
+            button = MinimalButton(title)
+            button.setAccessibleName({"↶":"Rotate laptop left", "↷":"Rotate laptop right"}.get(title,title))
+            button.clicked.connect(action)
+            power_row.addWidget(button)
         power_row.addWidget(self.power_button)
         old.addLayout(power_row)
         page = GlassFrame("panel")
@@ -2306,6 +2162,10 @@ class DesktopApplication(QMainWindow):
             self.effect_combo.addItem(effect["name"],effect["id"])
         self.effect_combo.activated.connect(lambda index: self._select_effect(self.effect_combo.itemData(index),activate=True))
         effects.addWidget(self.effect_combo)
+        self.effect_detail = QLabel()
+        self.effect_detail.setWordWrap(True)
+        self.effect_detail.setObjectName("muted")
+        effects.addWidget(self.effect_detail)
         effects.addStretch()
         controls = section("Effect Controls")
         controls.addWidget(QLabel("EFFECT SPEED"))
@@ -2413,8 +2273,8 @@ class DesktopApplication(QMainWindow):
         self._select_effect("steady", activate=True)
 
     def _audio_page(self):
-        page, layout = self._page("AUDIO REACTIVE", "Two local audio paths: microphone energy or Windows speaker beats.")
-        layout.addWidget(self._card_grid(self.AUDIO_IDS, 2))
+        page, layout = self._page("AUDIO REACTIVE", "Speaker Beats uses Windows output peaks, without opening the microphone.")
+        layout.addWidget(self._card_grid(self.AUDIO_IDS, 1))
         audio = GlassFrame("panel")
         audio.setObjectName("glass")
         audio_layout = QVBoxLayout(audio)
@@ -2643,6 +2503,7 @@ class DesktopApplication(QMainWindow):
         effect = self.selected_effect()
         if hasattr(self,"effect_combo"):
             self.effect_combo.setCurrentIndex(self.effect_combo.findData(effect))
+        self.speed_slider.setEnabled(self.god_mode and effect in ("breathe","reactive","music_speaker"))
         low, high = EffectEngine.SPEED_LIMITS.get(effect, (0.20, 4.00))
         effective = EffectEngine.clamp_speed(effect, self.speed_slider.value() / 10.0)
         self.speed_slider.blockSignals(True)
@@ -2653,8 +2514,6 @@ class DesktopApplication(QMainWindow):
         self.reactive_options.setVisible(self.god_mode and effect == "reactive")
         self.advanced_panel.setVisible(self.god_mode)
         self.audio_source_label.setText(
-            "MIC MODE follows the default microphone locally."
-            if effect == "music_mic" else
             "SPEAKER MODE uses Windows loopback output and adaptive beat transients—not the microphone."
         )
         if self._ui_ready and not self._suppress_effect_start:
@@ -2697,7 +2556,7 @@ class DesktopApplication(QMainWindow):
         for widget in self.advanced_widgets:
             widget.setVisible(self.god_mode)
         self.god_badge.setVisible(self.god_mode)
-        self.speed_slider.setEnabled(self.god_mode)
+        self.speed_slider.setEnabled(self.god_mode and self.selected_effect() in ("breathe","reactive","music_speaker"))
         if hasattr(self, "reactive_options"):
             self.reactive_options.setVisible(self.god_mode and self.selected_effect() == "reactive")
         if not self.god_mode and hasattr(self, "speed_slider"):
@@ -2900,6 +2759,10 @@ class DesktopApplication(QMainWindow):
     def _refresh_status(self):
         effect = next((item["name"] for item in EffectEngine.EFFECTS_META if item["id"] == self.selected_effect()), "Ready")
         self.lighting_summary.setText(f"{effect}  ·  {'On' if self.light_on else 'Off'}")
+        detail = next((item["desc"] for item in EffectEngine.EFFECTS_META if item["id"] == self.selected_effect()), "")
+        if self.engine.running and self.selected_effect() in ("focus_timer","night_shift"):
+            detail = getattr(self.engine,"effect_status","") or detail
+        self.effect_detail.setText(detail)
         status = self.ctrl.get_status()
         self.method_label.setText(f"{status.get('system_model', 'Lenovo LOQ')}  •  {status.get('method_display', 'Unknown')}")
         method = status.get("method")

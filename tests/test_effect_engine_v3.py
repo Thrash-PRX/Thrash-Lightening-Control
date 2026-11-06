@@ -23,7 +23,40 @@ class EffectEngineV3Tests(unittest.TestCase):
     def test_public_modes_exclude_retired_flash_modes(self):
         ids = {effect["id"] for effect in app.EffectEngine.EFFECTS_META}
         self.assertTrue({"battery_saver", "breathe", "reactive", "music_speaker"} <= ids)
-        self.assertTrue({"blink", "strobe", "sos", "lightning", "candle", "heartbeat", "disco", "pulse", "binary"}.isdisjoint(ids))
+        self.assertTrue({"blink", "strobe", "sos", "lightning", "candle", "heartbeat", "disco", "pulse", "binary", "wave", "music_mic"}.isdisjoint(ids))
+
+    def test_focus_timer_focus_reminder_break_and_restart(self):
+        engine = app.EffectEngine(RecordingController())
+        engine._focus_started = 0
+        engine.intensity = 100
+        with patch.object(engine,"_wait",return_value=False):
+            for timestamp,expected in [(0,2),(1499,2),(1501.5,2),(1510,0),(1800,2)]:
+                with patch.object(app.time,"monotonic",return_value=timestamp):
+                    engine._focus_timer()
+                self.assertEqual(engine.ctrl.current_level,expected)
+        self.assertIn("Focus",engine.effect_status)
+
+    def test_focus_reminder_can_light_one_level_keyboards(self):
+        engine = app.EffectEngine(RecordingController())
+        engine.ctrl.max_level = 1
+        engine._focus_started = 0
+        with patch.object(engine,"_wait",return_value=False), patch.object(app.time,"monotonic",return_value=1501.5):
+            engine._focus_timer()
+        self.assertEqual(engine.ctrl.current_level,1)
+
+    def test_night_shift_day_and_night_boundaries(self):
+        from types import SimpleNamespace
+        engine = app.EffectEngine(RecordingController())
+        engine.intensity = 100
+        with patch.object(engine,"_wait",return_value=False):
+            for hour,expected in [(21,2),(22,1),(0,1),(6,1),(7,2)]:
+                with patch.object(app.time,"localtime",return_value=SimpleNamespace(tm_hour=hour)):
+                    engine._night_shift()
+                self.assertEqual(engine.ctrl.current_level,expected)
+            engine.ctrl.max_level=1
+            with patch.object(app.time,"localtime",return_value=SimpleNamespace(tm_hour=22)):
+                engine._night_shift()
+            self.assertEqual(engine.ctrl.current_level,1)
 
     def test_constant_intensity_does_not_toggle_native_states(self):
         controller = RecordingController()
@@ -119,28 +152,8 @@ class EffectEngineV3Tests(unittest.TestCase):
         self.assertTrue(all(a >= b for a, b in zip(samples[50:100], samples[51:])))
         self.assertLess(max(abs(b - a) for a, b in zip(samples, samples[1:])), 0.04)
 
-    def test_wave_curve_is_materially_different_from_breathe(self):
-        phases = [index / 100 for index in range(101)]
-        breathe = [app.EffectEngine._breathe_envelope(phase) for phase in phases]
-        wave = [app.EffectEngine._wave_envelope(phase) for phase in phases]
-
-        breathe_peak = max(range(len(breathe)), key=breathe.__getitem__) / 100
-        wave_peak = max(range(len(wave)), key=wave.__getitem__) / 100
-        mean_difference = sum(abs(a - b) for a, b in zip(breathe, wave)) / len(phases)
-
-        self.assertGreaterEqual(breathe_peak, 0.45)
-        self.assertLessEqual(breathe_peak, 0.55)
-        self.assertGreaterEqual(wave_peak, 0.08)
-        self.assertLessEqual(wave_peak, 0.30)
-        self.assertGreater(mean_difference, 0.25)
-        self.assertGreater(
-            app.EffectEngine._wave_envelope(0.78),
-            app.EffectEngine._wave_envelope(0.68) + 0.20,
-        )
-
     def test_god_mode_speed_limits_protect_smooth_effects(self):
         self.assertEqual(app.EffectEngine.clamp_speed("breathe", 9.0), 1.65)
-        self.assertEqual(app.EffectEngine.clamp_speed("wave", 9.0), 2.20)
         self.assertEqual(app.EffectEngine.clamp_speed("reactive", 9.0), 2.00)
         self.assertEqual(app.EffectEngine.clamp_speed("breathe", 0.01), 0.45)
 

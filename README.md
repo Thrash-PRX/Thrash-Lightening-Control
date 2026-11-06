@@ -18,15 +18,17 @@ Bolder headings, 140 ms hover feedback, 160 ms page fades and a 180 ms window en
 
 ## v3.2.0 development branch
 
-URX Hub-inspired native Qt dashboard with URX Lighting screen proportions: compact top pills, a large live LOQ device-image stage, icon rail, and three control panels, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The preview uses the user-supplied LOQ image with white lighting restricted to its keyboard area. Screen, chassis and palm rest remain unchanged. It samples cached native brightness at 30 Hz while visible, lights every key as one white zone, and shows unavailable state when the bridge is disconnected. It sends no additional hardware commands. The supplied image is 300×300, so scaling is limited by the original detail.
+The URX-style native dashboard includes a rotatable 3D LOQ-inspired laptop with a chassis, hinged lid, screen, keyboard, numpad and touchpad. Drag to orbit, scroll to zoom, use arrow keys or the rotation buttons, and double-click/Home/Reset view to return. This is a stylized model built from geometry based on the supplied photo, not Lenovo CAD. It uses the existing Qt painter and adds no webview or 3D-engine runtime. Camera and native-state changes trigger redraws; it does not spin continuously.
 
-The focused mode catalog contains Steady, Battery Saver, Breathe, Surge Wave, Reactive, and the two audio modes. Repetitive Heartbeat, Disco, Pulse, and Binary Clock are retired. Existing saved selections for retired modes fall back to Battery Saver without auto-starting.
+Keycaps are a single white lighting surface driven by cached native Off/Dim/Bright state. There are no extra hardware calls from the preview, invented RGB controls or per-key hardware effects.
 
-The hardware provides Off/Dim/Bright (some models have only one illuminated level). Effect envelopes use native steps with hysteresis, not rapid software PWM. This reduces repeated bridge writes and boundary flicker; it does not provide continuous dimming. Steady keeps a constant native level for focused work.
+The catalog now contains Steady, Battery Saver, Calm Breathe, Reactive, Speaker Beats, Focus Timer and Night Shift. Focus Timer repeats 25 minutes at steady brightness, a gentle two-breathe break reminder, then a dark break for the rest of the 30-minute cycle. Night Shift uses local time to dim from 10 PM through 7 AM. Its night level remains on for one-level keyboards. Focus timing restarts when the mode is selected again.
 
-This is a standalone app using a private Lenovo compatibility bridge, **not a Vantage plugin**. See [integration findings](docs/vantage-integration.md).
+Surge Wave and microphone following were retired after review. Saved preferences migrate to Calm Breathe and Speaker Beats without auto-starting. The microphone implementation and sounddevice dependency were removed. See [effect review](docs/effects-review.md).
 
-CI artifacts for this branch are unsigned development builds. Validate the hardware and installer before release. No new signed release is claimed.
+Effect envelopes use native brightness steps with hysteresis, not rapid software PWM. Continuous hardware dimming is unavailable. The app remains standalone, using a private Lenovo compatibility bridge; see [integration findings](docs/vantage-integration.md).
+
+CI artifacts are unsigned development builds. Hardware acceptance is still required before release.
 
 ## Requirements
 
@@ -55,13 +57,13 @@ Stable releases remain on the repository [Releases](../../releases) page. For v3
 
 | Mode | Purpose |
 | --- | --- |
-| Steady | Constant Dim or Bright for work |
+| Steady | Constant Dim or Bright |
 | Battery Saver | Wake on input, sleep after inactivity |
-| Breathe | Slow symmetric native-step rhythm |
-| Surge Wave | Asymmetric crest and trailing ripple |
-| Reactive | Brighten on typing, fade on release |
-| Music / Mic | Follow microphone energy locally |
-| Music / Speaker | Follow Windows output peaks locally |
+| Calm Breathe | Slow symmetric native-step rhythm |
+| Reactive | Brighten on typing, soften on release |
+| Speaker Beats | Follow Windows output peaks without a microphone |
+| Focus Timer | 25-minute focus, gentle reminder, dark break |
+| Night Shift | Automatic 10 PM–7 AM dimming using local time |
 
 ## Battery Saver, startup, and tray
 
@@ -71,8 +73,7 @@ When launched by Windows startup, the keyboard begins off. Battery Saver runs qu
 
 ## Audio privacy
 
-- Music / Mic analyzes short microphone blocks in memory. Nothing is saved or transmitted.
-- Music / Speaker reads the Windows Core Audio output peak meter. It does not open the microphone, record speaker samples, or upload audio.
+Speaker Beats reads Windows Core Audio output peaks. It does not open a microphone, capture audio samples, record or upload audio.
 
 ## Why PowerShell appears in Task Manager
 
