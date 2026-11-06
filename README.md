@@ -18,7 +18,7 @@ Bolder headings, 140 ms hover feedback, 160 ms page fades and a 180 ms window en
 
 ## v3.2.0 development branch
 
-URX Hub-inspired native Qt dashboard with URX Lighting screen proportions: compact top pills, a large live LOQ keyboard stage, icon rail, and three control panels, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The preview samples cached native brightness at 30 Hz while visible, lights every key as one white zone, and shows unavailable state when the bridge is disconnected. It sends no additional hardware commands. Physical layouts vary by model and region.
+URX Hub-inspired native Qt dashboard with URX Lighting screen proportions: compact top pills, a large live LOQ device-image stage, icon rail, and three control panels, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The preview uses the user-supplied LOQ image with white lighting restricted to its keyboard area. Screen, chassis and palm rest remain unchanged. It samples cached native brightness at 30 Hz while visible, lights every key as one white zone, and shows unavailable state when the bridge is disconnected. It sends no additional hardware commands. The supplied image is 300×300, so scaling is limited by the original detail.
 
 The focused mode catalog contains Steady, Battery Saver, Breathe, Surge Wave, Reactive, and the two audio modes. Repetitive Heartbeat, Disco, Pulse, and Binary Clock are retired. Existing saved selections for retired modes fall back to Battery Saver without auto-starting.
 

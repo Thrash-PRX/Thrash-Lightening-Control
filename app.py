@@ -25,7 +25,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QAction, QBrush, QColor, QFont, QFontMetrics, QIcon, QLinearGradient, QPainter, QPixmap,
-    QPainterPath, QPen, QRadialGradient,
+    QPainterPath, QPen, QRadialGradient, QImage,
 )
 from PySide6.QtWidgets import (
     QAbstractButton, QApplication, QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox,
@@ -1867,86 +1867,83 @@ class GodModeOverlay(QWidget):
 # this source preserves an easy migration reference while this definition is the
 # one instantiated by the entry point.
 class LOQKeyboardPreview(QWidget):
-    """Responsive LOQ-style ANSI schematic, lit uniformly from cached native state."""
+    """User-supplied device photo with a cached single-zone keyboard overlay."""
+    SOURCE = QRectF(24, 64, 254, 174)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(165)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setAccessibleName("Live single-zone LOQ keyboard preview")
-        self.level = 0
-        self.maximum = 2
-        self.available = False
-        self.setToolTip("LOQ-style ANSI schematic with numpad. Physical layouts vary by model and region. All keys share one white lighting zone.")
+        self.setAccessibleName("Live LOQ device effect preview")
+        self.level, self.maximum, self.available = 0, 2, False
+        self._device = QPixmap(resource_path("assets/loq-device.png"))
+        if self._device.isNull():
+            raise RuntimeError("The LOQ device preview asset is missing")
+        self._zone = self.keyboard_zone()
+        self._states = self._build_states()
+        self.setToolTip("Your supplied LOQ image. The keyboard is one white lighting zone; the screen and palm rest do not animate.")
 
     @staticmethod
-    def key_layout():
-        rows = [
-            [("Esc", 1)] + [(f"F{i}", 1) for i in range(1, 13)] + [("PrtSc", 1), ("Ins", 1), ("Del", 1)],
-            [("`", 1)] + [(str(i), 1) for i in [1,2,3,4,5,6,7,8,9,0]] + [("-", 1), ("=", 1), ("Back", 2)],
-            [("Tab", 1.5)] + [(k, 1) for k in "QWERTYUIOP"] + [("[", 1), ("]", 1), ("\\", 1.5)],
-            [("Caps", 1.8)] + [(k, 1) for k in "ASDFGHJKL"] + [(";", 1), ("'", 1), ("Enter", 2.2)],
-            [("Shift", 2.3)] + [(k, 1) for k in "ZXCVBNM"] + [(",", 1), (".", 1), ("/", 1), ("Shift", 2.7)],
-            [("Ctrl", 1.3), ("Fn", 1), ("Win", 1), ("Alt", 1), ("", 5.4), ("Alt", 1), ("Ctrl", 1.3), ("←", 1), ("↑↓", 1), ("→", 1)],
-        ]
-        keys = []
-        for row, items in enumerate(rows):
-            x = 0.0
-            scale = 15.0 / sum(width for _, width in items)
-            for label, width in items:
-                if label == "↑↓":
-                    keys.append(("↑", x, row, width * scale, 0.5))
-                    keys.append(("↓", x, row + 0.5, width * scale, 0.5))
-                else:
-                    keys.append((label, x, row, width * scale, 1))
-                x += width * scale
-        # Distinct numpad with tall plus/enter and a wide zero key.
-        pad = [
-            ("Num",0,1,1,1),("/",1,1,1,1),("*",2,1,1,1),("-",3,1,1,1),
-            ("7",0,2,1,1),("8",1,2,1,1),("9",2,2,1,1),("+",3,2,1,2),
-            ("4",0,3,1,1),("5",1,3,1,1),("6",2,3,1,1),
-            ("1",0,4,1,1),("2",1,4,1,1),("3",2,4,1,1),("Enter",3,4,1,2),
-            ("0",0,5,2,1),(".",2,5,1,1),
-        ]
-        keys.extend((label, 15.5+x, y, w, h) for label,x,y,w,h in pad)
-        return keys
+    def keyboard_zone():
+        # Source-image coordinates: keyboard block, numpad and lowered arrow cluster.
+        path = QPainterPath()
+        path.moveTo(56,122)
+        for x,y in [(245,122),(245,181),(212,181),(212,193),(174,193),(174,182),(56,182)]:
+            path.lineTo(x,y)
+        path.closeSubpath()
+        return path
+
+    def _build_states(self):
+        image = self._device.toImage()
+        legends = QImage(image.size(),QImage.Format_ARGB32_Premultiplied)
+        legends.fill(Qt.transparent)
+        # Build once, not per animation frame. Brightness follows the original key detail.
+        for y in range(122,194):
+            for x in range(56,246):
+                if not self._zone.contains(QPointF(x+0.5,y+0.5)):
+                    continue
+                color = image.pixelColor(x,y)
+                luminance = (color.red()*0.2126 + color.green()*0.7152 + color.blue()*0.0722)
+                alpha = int(max(0,min(180,(luminance-85)*1.8)))
+                legends.setPixelColor(x,y,QColor(255,255,255,alpha))
+        states = {}
+        for level in (0,1,2):
+            frame = self._device.copy()
+            painter = QPainter(frame)
+            painter.setClipPath(self._zone)
+            if level < 2:
+                painter.fillPath(self._zone,QColor(0,0,0,170 if level == 0 else 65))
+            else:
+                painter.drawImage(0,0,legends)
+                painter.fillPath(self._zone,QColor(255,255,255,12))
+            painter.end()
+            states[level] = frame
+        return states
 
     def set_native_state(self, level, maximum=2, available=True):
-        maximum = max(1, int(maximum))
-        state = (max(0, min(maximum, int(level))), maximum, bool(available))
-        if state != (self.level, self.maximum, self.available):
-            self.level, self.maximum, self.available = state
-            name = "Unavailable" if not self.available else "Off" if self.level == 0 else "Dim" if self.level < self.maximum else "Bright"
-            self.setAccessibleDescription(f"{name}. Single white lighting zone; cached controller state.")
+        maximum = max(1,int(maximum))
+        state = (max(0,min(maximum,int(level))),maximum,bool(available))
+        if state != (self.level,self.maximum,self.available):
+            self.level,self.maximum,self.available = state
+            self.setAccessibleDescription(f"{self.state_name()}. Single white lighting zone; cached controller state.")
             self.update()
 
-    def paintEvent(self, event):
+    def state_name(self):
+        return "Unavailable" if not self.available else "Off" if self.level == 0 else "Dim" if self.level < self.maximum else "Bright"
+
+    def paintEvent(self,event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        width = min(self.width() - 24, 850)
-        unit = width / 19.5
-        height = (self.height() - 26) / 6
-        left = (self.width() - width) / 2
-        glow = self.level / self.maximum if self.available else 0
-        painter.setPen(QPen(QColor(64, 64, 64, 255), 1))
-        painter.setBrush(QColor(24, 24, 24, 255))
-        painter.drawRoundedRect(QRectF(left, 0, width, self.height()-19), 10, 10)
-        for label, x, y, w, h in self.key_layout():
-            rect = QRectF(left + x*unit + 4, y*height + 4, w*unit - 5, h*height - 5)
-            if glow:
-                painter.setPen(Qt.NoPen)
-                painter.setBrush(QColor(220, 237, 255, int(12 + glow*24)))
-                painter.drawRoundedRect(rect.adjusted(-1.4, -1.4, 1.4, 1.4), 4, 4)
-            painter.setBrush(QColor(15+int(glow*17), 15+int(glow*17), 15+int(glow*17)))
-            painter.setPen(QPen(QColor(225, 225, 225, int(15 + glow*170)), 0.8))
-            painter.drawRoundedRect(rect, 3, 3)
-            painter.setFont(QFont("Segoe UI", max(5, int(unit*0.16))))
-            painter.setPen(QColor(255,255,255, int(150 + glow*105)))
-            painter.drawText(rect, Qt.AlignCenter, label)
-        painter.setFont(QFont("Segoe UI", 8))
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        source = self.SOURCE
+        scale = min((self.width()-24)/source.width(),max(1,self.height()-28)/source.height())
+        width,height = source.width()*scale,source.height()*scale
+        target = QRectF((self.width()-width)/2,0,width,height)
+        level = 0 if not self.available else 0 if self.level == 0 else 2 if self.level == self.maximum else 1
+        painter.drawPixmap(target,self._states[level],source)
         painter.setPen(QColor("#a1a1aa"))
-        state = "Unavailable" if not self.available else "Off" if self.level == 0 else "Dim" if self.level < self.maximum else "Bright"
-        painter.drawText(QRectF(left, self.height()-18, width, 18), Qt.AlignCenter, f"{state.upper()}  ·  SINGLE WHITE ZONE  ·  LOQ-STYLE ANSI LAYOUT")
+        painter.setFont(QFont("Segoe UI",8))
+        painter.drawText(QRectF(0,self.height()-22,self.width(),20),Qt.AlignCenter,
+                         f"LOQ  ·  {self.state_name().upper()}  ·  SINGLE WHITE ZONE")
         painter.end()
 
 
@@ -2027,6 +2024,7 @@ class DesktopApplication(QMainWindow):
         sidebar.setMinimumHeight(300)
         sidebar_scroll = self._scroll_page(sidebar)
         sidebar_scroll.setFixedWidth(280)
+        self.sidebar_scroll = sidebar_scroll
         lower.addWidget(sidebar_scroll)
 
         body = QVBoxLayout()
@@ -2054,6 +2052,13 @@ class DesktopApplication(QMainWindow):
         self.pages.currentChanged.connect(self._animate_page_change)
 
     def _animate_page_change(self, index):
+        for title,(button,page) in self.rail_buttons.items():
+            button.setProperty("selected",page == index and title != "Reactive")
+            button.style().unpolish(button)
+            button.style().polish(button)
+        selected = self.nav_buttons.button(index)
+        if selected:
+            selected.setChecked(True)
         self._page_fade.stop()
         self._page_opacity.setOpacity(1.0)
         if self.animations_enabled and self.isVisible() and not self.isMinimized():
@@ -2143,11 +2148,13 @@ class DesktopApplication(QMainWindow):
         row.setContentsMargins(12, 28, 12, 22)
         row.setSpacing(14)
         icons = QVBoxLayout()
+        self.rail_buttons = {}
         for icon, title, page in [("▤", "Device",2),("ϟ", "Reactive",0),("☼", "Lighting",0),("♫", "Audio",1),("⚙", "Settings",3),("ⓘ", "About",4)]:
             button = MinimalButton(icon)
             button.setObjectName("railIcon")
             button.setFixedSize(44,44)
             button.setAccessibleName(title)
+            self.rail_buttons[title] = (button,page)
             button.setToolTip(title)
             button.clicked.connect(lambda checked=False, i=page: self.pages.setCurrentIndex(i))
             if title == "Lighting":
@@ -2155,7 +2162,9 @@ class DesktopApplication(QMainWindow):
             icons.addWidget(button)
         icons.addStretch()
         row.addLayout(icons)
-        features = QVBoxLayout()
+        self.sidebar_features = QWidget(sidebar)
+        features = QVBoxLayout(self.sidebar_features)
+        features.setContentsMargins(0,0,0,0)
         for index, text in [(0,"Effects"),(1,"Audio Reactive"),(2,"Device"),(3,"Settings"),(4,"About")]:
             button = MinimalButton(text)
             button.setObjectName("nav")
@@ -2169,7 +2178,7 @@ class DesktopApplication(QMainWindow):
         features.addStretch()
         self.god_badge = QLabel("ADVANCED")
         features.addWidget(self.god_badge)
-        row.addLayout(features,1)
+        row.addWidget(self.sidebar_features,1)
         return sidebar
 
     def _make_header(self):
@@ -2944,6 +2953,11 @@ class DesktopApplication(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if hasattr(self,"sidebar_features"):
+            compact = self.width() < 1350
+            self.sidebar_features.setVisible(not compact)
+            self.sidebar_panel.setFixedWidth(76 if compact else 270)
+            self.sidebar_scroll.setFixedWidth(86 if compact else 280)
         if hasattr(self, "preview_panel"):
             self.preview_panel.setFixedHeight(max(250, int(self.height() * 0.42) - 20))
         if hasattr(self, "god_overlay"):

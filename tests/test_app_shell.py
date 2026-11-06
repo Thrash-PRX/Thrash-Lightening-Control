@@ -98,13 +98,28 @@ class DesktopShellTests(unittest.TestCase):
         self.assertFalse(controller.levels)
         window._quit_application()
 
-    def test_keyboard_preview_contains_distinct_numpad_and_single_zone(self):
-        keys = app.LOQKeyboardPreview.key_layout()
-        self.assertGreater(len(keys), 95)
-        self.assertTrue(any(label == 'Enter' and x > 15 and height == 2 for label,x,y,width,height in keys))
-        window = self.make_window(DummyController(), DummyEngine())
-        window.keyboard_preview.set_native_state(2, 2, True)
-        self.assertIn('Bright', window.keyboard_preview.accessibleDescription())
+    def test_device_photo_states_only_change_keyboard_zone(self):
+        window = self.make_window(DummyController(),DummyEngine())
+        preview = window.keyboard_preview
+        self.assertFalse(preview._device.isNull())
+        dark = preview._states[0].toImage()
+        bright = preview._states[2].toImage()
+        changed = 0
+        for y in range(dark.height()):
+            for x in range(dark.width()):
+                if dark.pixel(x,y) != bright.pixel(x,y):
+                    changed += 1
+                    self.assertTrue(preview._zone.contains(app.QPointF(x+0.5,y+0.5)))
+        self.assertGreater(changed,1000)
+        preview.set_native_state(1,1,True)
+        self.assertEqual(preview.state_name(),"Bright")
+        window.resize(1280,820)
+        window.show()
+        self.qt_app.processEvents()
+        self.assertTrue(window.sidebar_features.isHidden())
+        window.resize(1440,900)
+        self.qt_app.processEvents()
+        self.assertFalse(window.sidebar_features.isHidden())
         window._quit_application()
 
     def test_effect_dropdown_and_tray_stay_synchronized(self):

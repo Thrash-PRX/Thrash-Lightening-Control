@@ -6,6 +6,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ("assets/app-icon.png", "assets"),
+        ("assets/loq-device.png", "assets"),
         ("assets/thrash-liquid-glass-v3.png", "assets"),
     ],
     hiddenimports=[],

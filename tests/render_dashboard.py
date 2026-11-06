@@ -28,4 +28,9 @@ with tempfile.TemporaryDirectory() as settings:
         window._refresh_keyboard_preview()
         qt.processEvents()
         assert window.grab().save(f"ui-preview-{width}.png")
+    for level in (0,1,2):
+        window.ctrl.current_level = level
+        window._refresh_keyboard_preview()
+        qt.processEvents()
+        assert window.grab().save(f"ui-preview-native-{level}.png")
     window._quit_application()
