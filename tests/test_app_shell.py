@@ -119,6 +119,26 @@ class DesktopShellTests(unittest.TestCase):
         self.assertEqual(window.windowTitle(),"LOQ LIGHTENING CENTRE")
         window._quit_application()
 
+    def test_minimal_motion_respects_toggle_and_stops_preview_in_tray(self):
+        window = self.make_window(DummyController(), DummyEngine())
+        window.show()
+        window._set_animations(True)
+        window.pages.setCurrentIndex(1)
+        self.assertLessEqual(window._page_fade.duration(),180)
+        window._set_animations(False)
+        self.assertEqual(window._page_opacity.opacity(),1.0)
+        button = window.findChildren(app.MinimalButton)[0]
+        button._hover_to(1.0)
+        self.assertEqual(button._hover_motion.state(),app.QVariantAnimation.Stopped)
+        self.assertFalse(window.background._timer.isActive())
+        window.hide()
+        window._sync_animation_timers()
+        self.assertFalse(window.preview_timer.isActive())
+        window.show()
+        window._sync_animation_timers()
+        self.assertTrue(window.preview_timer.isActive())
+        window._quit_application()
+
     def test_native_presets_start_steady_and_dashboard_tracks_power(self):
         engine = DummyEngine()
         window = self.make_window(DummyController(), engine)

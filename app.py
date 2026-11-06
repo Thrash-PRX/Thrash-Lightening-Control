@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
     QAbstractButton, QApplication, QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton, QRadioButton,
     QProgressBar, QScrollArea, QSizePolicy, QSlider, QStackedWidget,
-    QSystemTrayIcon, QVBoxLayout, QWidget,
+    QSystemTrayIcon, QVBoxLayout, QWidget, QGraphicsOpacityEffect,
 )
 
 # Define hook-related types and signatures for ctypes
@@ -1302,6 +1302,55 @@ def apply_windows_backdrop(widget, dark=True):
         return False
 
 
+class MinimalButton(QPushButton):
+    """Short hover feedback, with no perpetual animation or layout movement."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._hover_amount = 0.0
+        self._hover_motion = QVariantAnimation(self)
+        self._hover_motion.setEasingCurve(QEasingCurve.OutCubic)
+        self._hover_motion.valueChanged.connect(self._set_hover_amount)
+
+    def _set_hover_amount(self, value):
+        self._hover_amount = float(value)
+        self.update()
+
+    def _hover_to(self, amount):
+        self._hover_motion.stop()
+        if not getattr(self.window(), "animations_enabled", True):
+            self._set_hover_amount(amount)
+            return
+        self._hover_motion.setDuration(140 if amount else 100)
+        self._hover_motion.setStartValue(self._hover_amount)
+        self._hover_motion.setEndValue(amount)
+        self._hover_motion.start()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self._hover_to(1.0)
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._hover_to(0.0)
+
+    def hideEvent(self, event):
+        self._hover_motion.stop()
+        self._hover_amount = 0.0
+        super().hideEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._hover_amount <= 0 or not self.isEnabled():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(QColor(255,255,255,int(24*self._hover_amount)),1))
+        painter.setBrush(QColor(255,255,255,int(12*self._hover_amount)))
+        radius = min(20, self.height()/2-1)
+        painter.drawRoundedRect(QRectF(self.rect()).adjusted(1,1,-1,-1),radius,radius)
+        painter.end()
+
+
 class GlassFrame(QFrame):
     """Layered translucent surface with depth, tint, and specular glass edges."""
 
@@ -1996,6 +2045,21 @@ class DesktopApplication(QMainWindow):
         lower.addLayout(body, 1)
         root.addLayout(lower, 1)
         self.god_overlay = GodModeOverlay(self.background)
+        self._page_opacity = QGraphicsOpacityEffect(self.pages)
+        self._page_opacity.setOpacity(1.0)
+        self.pages.setGraphicsEffect(self._page_opacity)
+        self._page_fade = QPropertyAnimation(self._page_opacity, b"opacity", self)
+        self._page_fade.setDuration(160)
+        self._page_fade.setEasingCurve(QEasingCurve.OutCubic)
+        self.pages.currentChanged.connect(self._animate_page_change)
+
+    def _animate_page_change(self, index):
+        self._page_fade.stop()
+        self._page_opacity.setOpacity(1.0)
+        if self.animations_enabled and self.isVisible() and not self.isMinimized():
+            self._page_fade.setStartValue(0.86)
+            self._page_fade.setEndValue(1.0)
+            self._page_fade.start()
 
     def _set_theme(self):
         accents = {"white": "#ffffff", "cyan": "#42c8ff", "violet": "#a78bfa", "amber": "#f59e0b", "emerald": "#34d399"}
@@ -2019,9 +2083,9 @@ class DesktopApplication(QMainWindow):
             QMainWindow {{ background: {'#e9f1f6' if light else '#05070c'}; }}
             QWidget {{ color: {text}; font: 9.5pt 'Segoe UI Variable Text'; }}
             QLabel {{ background: transparent; }}
-            QLabel#devicePill {{ border:1px solid #222; border-radius:24px; padding:12px 18px; font:600 10pt 'Segoe UI'; }}
-            QLabel#replicaHeading {{ font:700 25pt 'Segoe UI'; color:{title}; }}
-            QLabel#controlHeading {{ font:650 12pt 'Segoe UI'; color:{title}; }}
+            QLabel#devicePill {{ border:1px solid #222; border-radius:24px; padding:12px 18px; font:700 10pt 'Segoe UI'; }}
+            QLabel#replicaHeading {{ font:900 26pt 'Segoe UI'; color:{title}; }}
+            QLabel#controlHeading {{ font:800 13pt 'Segoe UI'; color:{title}; }}
             QPushButton#readConfig {{ background:#ffffff; color:#111111; border-radius:20px; padding:14px 20px; }}
             QPushButton#railIcon {{ width:44px; height:44px; border:0; border-radius:22px; padding:0; background:transparent; color:#a1a1aa; font:18pt 'Segoe UI Symbol'; }}
             QPushButton#railIcon[selected='true'] {{ background:#ffffff; color:#111111; }}
@@ -2031,15 +2095,15 @@ class DesktopApplication(QMainWindow):
             QComboBox QAbstractItemView {{ background:#161616; color:#ffffff; selection-background-color:#333333; }}
 
             QLabel#headerTitle {{ color: {title}; }}
-            QLabel#title {{ font: 700 24pt 'Segoe UI Variable Display'; color: {title}; }}
-            QLabel#pageTitle {{ font: 650 19pt 'Segoe UI Variable Display'; color: {title}; }}
+            QLabel#title {{ font: 900 24pt 'Segoe UI'; color: {title}; }}
+            QLabel#pageTitle {{ font: 800 20pt 'Segoe UI'; color: {title}; }}
             QLabel#section {{ color: {accent}; font: 650 8pt 'Segoe UI Variable Text'; }}
             QLabel#muted {{ color: {muted}; }}
             QFrame#sidebar, QFrame#glass, QFrame#status {{ background: transparent; border: 0; }}
             QGroupBox {{ background: {group_gradient}; border: 1px solid {border}; border-radius: 18px; }}
             QPushButton {{ background: {button}; border: 1px solid {border};
                 border-radius: 20px; padding: 12px 16px; font: 600 9pt 'Segoe UI Variable Text'; }}
-            QPushButton:hover {{ border-color: {accent}; background: {hover}; }}
+            QPushButton:hover {{ border-color: {border}; background: {button}; }}
             QPushButton#nav {{ text-align: left; background: transparent; border: 0; padding: 8px 12px; color: {muted}; }}
             QPushButton#nav:checked {{ color: {"#111111" if not light else "#ffffff"}; background: {nav_selected}; border-radius: 18px; }}
             QPushButton#primary {{ background: {accent}; color: #05080d; border: 0; font-weight: 750; }}
@@ -2080,7 +2144,7 @@ class DesktopApplication(QMainWindow):
         row.setSpacing(14)
         icons = QVBoxLayout()
         for icon, title, page in [("▤", "Device",2),("ϟ", "Reactive",0),("☼", "Lighting",0),("♫", "Audio",1),("⚙", "Settings",3),("ⓘ", "About",4)]:
-            button = QPushButton(icon)
+            button = MinimalButton(icon)
             button.setObjectName("railIcon")
             button.setFixedSize(44,44)
             button.setAccessibleName(title)
@@ -2093,7 +2157,7 @@ class DesktopApplication(QMainWindow):
         row.addLayout(icons)
         features = QVBoxLayout()
         for index, text in [(0,"Effects"),(1,"Audio Reactive"),(2,"Device"),(3,"Settings"),(4,"About")]:
-            button = QPushButton(text)
+            button = MinimalButton(text)
             button.setObjectName("nav")
             button.setFixedHeight(42)
             button.setCheckable(True)
@@ -2114,7 +2178,7 @@ class DesktopApplication(QMainWindow):
         panel.setFixedHeight(54)
         row = QHBoxLayout(panel)
         row.setContentsMargins(0, 0, 0, 0)
-        back = QPushButton("‹  Back")
+        back = MinimalButton("‹  Back")
         back.clicked.connect(lambda: self.pages.setCurrentIndex(2))
         row.addWidget(back)
         self.header_title = QLabel("LOQ LIGHTENING CENTRE")
@@ -2124,11 +2188,11 @@ class DesktopApplication(QMainWindow):
         self.header_subtitle = QLabel("THRASH")
         self.header_subtitle.setObjectName("muted")
         row.addWidget(self.header_subtitle)
-        default = QPushButton("Default  ⌄")
+        default = MinimalButton("Default  ⌄")
         default.setToolTip("Open lighting preferences")
         default.clicked.connect(lambda: self.pages.setCurrentIndex(3))
         row.addWidget(default)
-        read = QPushButton("⟳  Read Config")
+        read = MinimalButton("⟳  Read Config")
         read.setObjectName("readConfig")
         read.clicked.connect(self.redetect)
         row.addWidget(read)
@@ -2137,7 +2201,7 @@ class DesktopApplication(QMainWindow):
         self.connection_dot = QLabel("●", self.header_status_cluster)
         self.method_label = QLabel("Detecting…", self.header_status_cluster)
         self.state_label = ElidedLabel("READY", self.header_status_cluster)
-        self.power_button = QPushButton("☼")
+        self.power_button = MinimalButton("☼")
         self.power_button.setObjectName("power")
         self.power_button.setProperty("powered", False)
         self.power_button.setAccessibleName("Lighting power")
@@ -2246,7 +2310,7 @@ class DesktopApplication(QMainWindow):
         custom = section("Effect Customization")
         segment = QHBoxLayout()
         for title, value in [("Dim",50),("Bright",100)]:
-            button = QPushButton(title)
+            button = MinimalButton(title)
             button.setObjectName("segment")
             button.clicked.connect(lambda checked=False,v=value:self._native_preset(v))
             segment.addWidget(button)
@@ -2283,7 +2347,7 @@ class DesktopApplication(QMainWindow):
         summary_layout.addWidget(self.keyboard_preview)
         presets = QHBoxLayout()
         for label, intensity in [("DIM", 50), ("BRIGHT", 100)]:
-            button = QPushButton(label)
+            button = MinimalButton(label)
             button.setAccessibleName(f"Steady {label.lower()} lighting")
             button.clicked.connect(lambda checked=False, value=intensity: self._native_preset(value))
             presets.addWidget(button)
@@ -2376,9 +2440,9 @@ class DesktopApplication(QMainWindow):
             info.addWidget(value, row, 1)
         layout.addWidget(panel)
         buttons = QHBoxLayout()
-        redetect = QPushButton("RE-DETECT HARDWARE")
+        redetect = MinimalButton("RE-DETECT HARDWARE")
         redetect.clicked.connect(self.redetect)
-        copy = QPushButton("COPY DIAGNOSTICS")
+        copy = MinimalButton("COPY DIAGNOSTICS")
         copy.clicked.connect(self._copy_diagnostics)
         buttons.addWidget(redetect)
         buttons.addWidget(copy)
@@ -2452,7 +2516,7 @@ class DesktopApplication(QMainWindow):
         god_layout.addWidget(self.timeout_slider)
         layout.addWidget(self.god_settings)
         self.advanced_widgets.append(self.god_settings)
-        reset = QPushButton("RESET INTERFACE DEFAULTS")
+        reset = MinimalButton("RESET INTERFACE DEFAULTS")
         reset.clicked.connect(self._reset_defaults)
         layout.addWidget(reset, 0, Qt.AlignLeft)
         layout.addStretch()
@@ -2617,12 +2681,8 @@ class DesktopApplication(QMainWindow):
     def _toggle_god_mode(self, enabled):
         self.god_mode = bool(enabled)
         self.settings.setValue("godMode", self.god_mode)
-        if enabled and self.animations_enabled:
-            for widget in self.advanced_widgets:
-                widget.hide()
-            self.god_overlay.play(lambda: self._apply_god_mode(repaint=True))
-        else:
-            self._apply_god_mode(repaint=True)
+        self._apply_god_mode(repaint=True)
+        self._animate_page_change(self.pages.currentIndex())
 
     def _apply_god_mode(self, repaint=False):
         for widget in self.advanced_widgets:
@@ -2653,6 +2713,16 @@ class DesktopApplication(QMainWindow):
     def _set_animations(self, enabled):
         self.animations_enabled = bool(enabled)
         self.settings.setValue("animations", self.animations_enabled)
+        if not enabled:
+            if hasattr(self,"_page_fade"):
+                self._page_fade.stop()
+                self._page_opacity.setOpacity(1.0)
+            for button in self.findChildren(MinimalButton):
+                button._hover_motion.stop()
+                button._set_hover_amount(0.0)
+            if hasattr(self,"_entrance_animation"):
+                self._entrance_animation.stop()
+                self.setWindowOpacity(1.0)
         self._sync_animation_timers()
         if hasattr(self, "animated_brand"):
             self.animated_brand.update()
@@ -2660,7 +2730,13 @@ class DesktopApplication(QMainWindow):
             self.background.update()
 
     def _sync_animation_timers(self):
-        active = self.animations_enabled and self.isVisible() and not self.isMinimized()
+        visible = self.isVisible() and not self.isMinimized()
+        active = self.animations_enabled and visible and not self.hub_style
+        if hasattr(self, "preview_timer"):
+            if visible:
+                self.preview_timer.start(33)
+            else:
+                self.preview_timer.stop()
         if hasattr(self, "animated_brand"):
             if active:
                 self.animated_brand._timer.start(33)
@@ -2860,7 +2936,7 @@ class DesktopApplication(QMainWindow):
             self._has_animated = True
             self.setWindowOpacity(0.0)
             self._entrance_animation = QPropertyAnimation(self, b"windowOpacity", self)
-            self._entrance_animation.setDuration(480)
+            self._entrance_animation.setDuration(180)
             self._entrance_animation.setStartValue(0.0)
             self._entrance_animation.setEndValue(1.0)
             self._entrance_animation.setEasingCurve(QEasingCurve.OutCubic)

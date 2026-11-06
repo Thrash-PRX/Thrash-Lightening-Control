@@ -14,6 +14,8 @@
 
 **THRASH · Made by Hanif**
 
+Bolder headings, 140 ms hover feedback, 160 ms page fades and a 180 ms window entrance keep motion restrained. Interface animations can be disabled in Settings. Decorative background timers stay off in the monochrome interface, and live preview sampling stops while hidden in the tray.
+
 ## v3.2.0 development branch
 
 URX Hub-inspired native Qt dashboard with URX Lighting screen proportions: compact top pills, a large live LOQ keyboard stage, icon rail, and three control panels, Dim/Bright shortcuts, themed glass panels, one-click effect selection, tray switching, and remembered preferences. The preview samples cached native brightness at 30 Hz while visible, lights every key as one white zone, and shows unavailable state when the bridge is disconnected. It sends no additional hardware commands. Physical layouts vary by model and region.
