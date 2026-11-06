@@ -222,6 +222,7 @@ class DesktopShellTests(unittest.TestCase):
             available = window.header_title.contentsRect().width()
             self.assertLessEqual(required, available + 1, f"title clipped at {width}px")
             self.assertGreaterEqual(window.header_title.font().pointSizeF(), 15)
+            self.assertGreaterEqual(window.header_title.height(), metrics.height())
             self.assertLessEqual(
                 window.header_panel.minimumSizeHint().width(),
                 window.header_panel.width(),

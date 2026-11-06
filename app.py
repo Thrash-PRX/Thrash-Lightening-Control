@@ -1842,7 +1842,11 @@ class LOQKeyboardPreview(QWidget):
             x = 0.0
             scale = 15.0 / sum(width for _, width in items)
             for label, width in items:
-                keys.append((label, x, row, width * scale, 1))
+                if label == "↑↓":
+                    keys.append(("↑", x, row, width * scale, 0.5))
+                    keys.append(("↓", x, row + 0.5, width * scale, 0.5))
+                else:
+                    keys.append((label, x, row, width * scale, 1))
                 x += width * scale
         # Distinct numpad with tall plus/enter and a wide zero key.
         pad = [
@@ -1967,7 +1971,11 @@ class DesktopApplication(QMainWindow):
         root.setSpacing(14)
         root.addWidget(self._make_header())
         lower = QHBoxLayout()
-        lower.addWidget(self._make_sidebar())
+        sidebar = self._make_sidebar()
+        sidebar.setMinimumHeight(335)
+        sidebar_scroll = self._scroll_page(sidebar)
+        sidebar_scroll.setFixedWidth(190)
+        lower.addWidget(sidebar_scroll)
 
         body = QVBoxLayout()
         body.setSpacing(12)
@@ -2037,6 +2045,10 @@ class DesktopApplication(QMainWindow):
             QSlider::handle:horizontal {{ width: 19px; margin: -7px 0; background: #eaf8ff; border: 2px solid {accent}; border-radius: 9px; }}
             QProgressBar {{ height: 8px; background: #1e2a3c; border: 0; border-radius: 4px; }}
             QProgressBar::chunk {{ background: {accent}; border-radius: 4px; }}
+            QScrollBar:vertical {{ background: transparent; width: 7px; margin: 0; }}
+            QScrollBar::handle:vertical {{ background: #454545; min-height: 26px; border-radius: 3px; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
             QScrollArea {{ border: 0; background: transparent; }}
             QScrollArea > QWidget > QWidget {{ background: transparent; }}
         """)
@@ -2079,7 +2091,7 @@ class DesktopApplication(QMainWindow):
         panel = GlassFrame("header")
         panel.setObjectName("status")
         self.header_panel = panel
-        panel.setMinimumHeight(80)
+        panel.setFixedHeight(114)
         column = QVBoxLayout(panel)
         column.setContentsMargins(20, 13, 16, 12)
         column.setSpacing(5)
@@ -2798,6 +2810,7 @@ class DesktopApplication(QMainWindow):
     def _quit_application(self):
         self._quitting = True
         self.status_timer.stop()
+        self.preview_timer.stop()
         self.engine.stop()
         self.ctrl.shutdown()
         self.tray_icon.hide()
