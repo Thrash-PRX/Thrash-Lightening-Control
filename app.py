@@ -523,18 +523,32 @@ class KeyboardBacklightController:
             self._ps_output.put(line.strip())
 
     def close_ps(self):
-        """Properly close the PowerShell process."""
-        if self.ps_proc:
-            try:
-                self.ps_proc.stdin.write("exit\n")
-                self.ps_proc.stdin.flush()
-                self.ps_proc.wait(timeout=2)
-            except:
+        """Close the owned helper and its pipes, including after an unexpected exit."""
+        proc = self.ps_proc
+        self.ps_proc = None
+        if proc is None:
+            return
+        try:
+            if proc.poll() is None:
                 try:
-                    self.ps_proc.kill()
-                except:
+                    proc.stdin.write("exit\n")
+                    proc.stdin.flush()
+                except (OSError, ValueError):
                     pass
-            self.ps_proc = None
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=2)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        finally:
+            for stream in (proc.stdin, proc.stdout, proc.stderr):
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except (OSError, ValueError):
+                        pass
 
     def shutdown(self):
         """Permanently stop recovery and close the bridge."""
@@ -967,7 +981,7 @@ class EffectEngine:
             self._last_input_tick = latest_input_tick
 
         if keyboard_activity or system_activity:
-            if keyboard_activity and self._last_key_vk == 0x20 and not self.idle_sleeping:
+            if keyboard_activity and self._last_key_vk == 0x20:
                 # Fn itself is firmware-owned, but Space is visible. Give the
                 # native Fn+Space cycle time to settle, then synchronize.
                 previous_native = self.ctrl.current_level
@@ -980,8 +994,15 @@ class EffectEngine:
             self.idle_seconds = 0.0
             if self.idle_sleeping:
                 self.idle_sleeping = False
-                if self._fade_to(self.intensity, 0.68, start=0):
-                    return True
+                maximum = max(1, int(self.ctrl.max_level))
+                target = max(1, min(maximum, int(math.floor(self.intensity / 100 * maximum + 0.5))))
+                # Restore the user's selected native level directly. A night-time
+                # wake must not sweep through other illuminated levels.
+                if self.ctrl.current_level != target:
+                    if not self.ctrl.set_brightness(target):
+                        self.last_error = getattr(self.ctrl, "last_error", None) or "Could not restore the selected brightness"
+                        return True
+                self._rendered_intensity = self.intensity
 
         self.idle_seconds = max(0.0, time.monotonic() - self._idle_started)
         if self.idle_seconds >= self.idle_timeout and not self.idle_sleeping:

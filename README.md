@@ -67,7 +67,7 @@ Stable releases remain on the repository [Releases](../../releases) page. For v3
 
 ## Battery Saver, startup, and tray
 
-When launched by Windows startup, the keyboard begins off. Battery Saver runs quietly in the tray and the first keyboard or mouse input breathes the light up to the user's remembered 1–100 intensity. Mouse movement, clicks, scrolling, and keypresses all reset the timer. After 30 seconds without any of those inputs, it fades out again. The timeout can be changed only in God Mode.
+When launched by Windows startup, the keyboard begins off. Battery Saver runs quietly in the tray and the first keyboard or mouse input restores the user's chosen native Dim or Bright level directly, without stepping through other illuminated levels. Mouse movement, clicks, scrolling, and keypresses all reset the timer. After 30 seconds without any of those inputs, it fades out again. The timeout can be changed only in God Mode.
 
 **Run at Windows Startup** creates a current-user Startup apps entry and an elevated on-demand scheduled task with the stable identifier `Thrash Lightening Control`. This avoids leaving a visible console window and lets the entry appear in Task Manager. Turning the option off removes both entries. No Windows service is installed.
 

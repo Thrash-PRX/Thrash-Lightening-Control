@@ -44,7 +44,7 @@ Focus Timer uses a monotonic 30-minute cycle to avoid wall-clock adjustments alt
 
 ## Battery saver and startup
 
-Battery Saver combines the global keyboard hook with Windows' `GetLastInputInfo` timestamp. A startup launch begins with the keyboard off. The first keyboard or mouse input performs a sine-eased wake to the remembered intensity; keypresses, mouse movement, clicks, and scrolling reset the timer, and the light fades off after 30 seconds of total input inactivity. The keyboard hook remains active so that, when Space is observed, the worker can poll Lenovo's native state after the firmware shortcut settles and synchronize Fn+Space changes when the contract reports them.
+Battery Saver combines the global keyboard hook with Windows' `GetLastInputInfo` timestamp. A startup launch begins with the keyboard off. The first keyboard or mouse input restores the user-selected native Dim or Bright level directly, without an upward brightness ramp; keypresses, mouse movement, clicks, and scrolling reset the timer, and the light fades off after 30 seconds of total input inactivity. The keyboard hook remains active so that, when Space is observed, the worker can poll Lenovo's native state after the firmware shortcut settles and synchronize Fn+Space changes when the contract reports them.
 
 The startup toggle creates or removes two linked per-user entries: a Windows `Run` value visible in Task Manager's Startup apps page, and an on-demand Task Scheduler action with `HighestAvailable` privileges. At sign-in the Run value starts the task, which launches the app hidden in the notification area. No background service is installed.
 

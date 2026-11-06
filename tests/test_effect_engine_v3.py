@@ -124,7 +124,49 @@ class EffectEngineV3Tests(unittest.TestCase):
         self.assertFalse(engine.idle_sleeping)
         self.assertEqual(engine.idle_seconds, 0.0)
         self.assertEqual(engine._idle_started, 40.0)
-        fade.assert_called_once_with(64, 0.68, start=0)
+        fade.assert_not_called()
+        self.assertEqual(engine.ctrl.levels, [1])
+
+    def test_battery_wake_goes_directly_to_selected_dim_or_bright(self):
+        for intensity,expected in [(50,1),(100,2)]:
+            engine = app.EffectEngine(RecordingController())
+            engine.running = True
+            engine.intensity = intensity
+            engine.idle_sleeping = True
+            engine._last_input_tick = 1
+            with patch.object(engine,"_get_last_input_tick",return_value=2), patch.object(engine,"_wait",return_value=True):
+                engine._battery_saver()
+            self.assertEqual(engine.ctrl.levels,[expected])
+            self.assertEqual(engine.intensity,intensity)
+
+    def test_fnspace_while_asleep_respects_new_dim_selection(self):
+        engine = app.EffectEngine(RecordingController())
+        engine.running = True
+        engine.intensity = 100
+        engine.idle_sleeping = True
+        engine._keypress_event.set()
+        engine._last_key_vk = 0x20
+        def native_dim():
+            engine.ctrl.current_level = 1
+            return 1
+        engine.ctrl.refresh_native_brightness = native_dim
+        with patch.object(engine,"_get_last_input_tick",return_value=None), patch.object(engine,"_wait",return_value=False):
+            engine._battery_saver()
+        self.assertEqual(engine.intensity,50)
+        self.assertEqual(engine.ctrl.current_level,1)
+        self.assertNotIn(2,engine.ctrl.levels)
+
+    def test_dead_helper_pipes_close_without_propagating_oserror(self):
+        from unittest.mock import Mock
+        controller = app.KeyboardBacklightController.__new__(app.KeyboardBacklightController)
+        proc = Mock()
+        proc.poll.return_value = 1
+        proc.stdin.close.side_effect = OSError("closed pipe")
+        controller.ps_proc = proc
+        controller.close_ps()
+        self.assertIsNone(controller.ps_proc)
+        proc.stdout.close.assert_called_once()
+        proc.stderr.close.assert_called_once()
 
     def test_battery_saver_unchanged_system_input_does_not_reset_idle(self):
         engine = app.EffectEngine(RecordingController())
