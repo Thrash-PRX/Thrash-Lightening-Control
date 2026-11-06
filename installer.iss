@@ -1,6 +1,6 @@
-#define MyAppName "Thrash Lightening Control"
-#define MyAppVersion "3.1.2"
-#define MyAppPublisher "Thrash"
+#define MyAppName "LOQ LIGHTENING CENTRE"
+#define MyAppVersion "3.2.0"
+#define MyAppPublisher "THRASH"
 #define MyAppExeName "ThrashLighteningControl.exe"
 
 [Setup]
@@ -9,16 +9,16 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL=https://github.com/Thrash-PRX/Lenovo-LOQ-Backlit-Effects-Thrash
-AppSupportURL=https://github.com/Thrash-PRX/Lenovo-LOQ-Backlit-Effects-Thrash/issues
-AppUpdatesURL=https://github.com/Thrash-PRX/Lenovo-LOQ-Backlit-Effects-Thrash/releases
+AppPublisherURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control
+AppSupportURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control/issues
+AppUpdatesURL=https://github.com/Thrash-PRX/Thrash-Lightening-Control/releases
 DefaultDirName={autopf}\Thrash\Thrash Lightening Control
-DefaultGroupName=Thrash Lightening Control
+DefaultGroupName=LOQ LIGHTENING CENTRE
 DisableProgramGroupPage=yes
 LicenseFile=LICENSE
 InfoBeforeFile=installer\INSTALL-NOTES.txt
 OutputDir=installer-dist
-OutputBaseFilename=ThrashLighteningControl-Setup-v{#MyAppVersion}
+OutputBaseFilename=LOQLighteningCentre-Setup-v{#MyAppVersion}
 SetupIconFile=assets\app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
@@ -37,7 +37,7 @@ VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
-VersionInfoVersion=3.1.2.0
+VersionInfoVersion=3.2.0.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -47,7 +47,6 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "installer-app\ThrashLighteningControl\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "installer\Thrash-Code-Signing.cer"; DestDir: "{app}\Verification"; Flags: ignoreversion
 Source: "installer\SHA256SUMS.txt"; DestDir: "{app}\Verification"; Flags: ignoreversion
 Source: "installer\VERIFICATION.txt"; DestDir: "{app}\Verification"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; DestName: "README.md"; Flags: ignoreversion

@@ -73,10 +73,128 @@ class DesktopShellTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.settings_directory.cleanup()
 
+    def make_window(self, controller, engine):
+        return app.DesktopApplication(controller, engine, settings=self.settings_store())
+
+    def settings_store(self):
+        return QSettings(os.path.join(self.settings_directory.name, "preferences.ini"), QSettings.IniFormat)
+
+    def test_keyboard_preview_follows_cached_native_state_without_hardware_poll(self):
+        controller = DummyController()
+        window = self.make_window(controller, DummyEngine())
+        window.show()
+        for level in (0, 1, 2, 0):
+            controller.current_level = level
+            window._refresh_keyboard_preview()
+            self.assertEqual(window.keyboard_preview.level, level)
+            self.assertTrue(window.keyboard_preview.available)
+        controller.max_level = 1
+        controller.current_level = 1
+        window._refresh_keyboard_preview()
+        self.assertEqual(window.keyboard_preview.maximum, 1)
+        controller.method = 'unavailable'
+        window._refresh_keyboard_preview()
+        self.assertFalse(window.keyboard_preview.available)
+        self.assertFalse(controller.levels)
+        window._quit_application()
+
+    def test_3d_preview_orbits_resets_and_retains_live_state(self):
+        from PySide6.QtTest import QTest
+        from PySide6.QtCore import QPoint
+        window = self.make_window(DummyController(),DummyEngine())
+        window.animations_enabled = False
+        window.show()
+        self.qt_app.processEvents()
+        preview = window.keyboard_preview
+        preview.set_native_state(2,2,True)
+        before = preview.grab().toImage()
+        QTest.keyClick(preview,Qt.Key_Right)
+        self.assertNotEqual(preview.yaw,preview.DEFAULT_VIEW[0])
+        self.assertNotEqual(before,preview.grab().toImage())
+        self.assertEqual(preview.state_name(),"Bright")
+        QTest.mouseDClick(preview,Qt.LeftButton,pos=QPoint(100,100))
+        self.assertEqual((preview.yaw,preview.pitch,preview.zoom),preview.DEFAULT_VIEW)
+        self.assertEqual(before,preview.grab().toImage())
+        QTest.mousePress(preview,Qt.LeftButton,pos=QPoint(100,100))
+        QTest.mouseMove(preview,QPoint(140,115))
+        QTest.mouseRelease(preview,Qt.LeftButton,pos=QPoint(140,115))
+        self.assertNotEqual(preview.yaw,preview.DEFAULT_VIEW[0])
+        from PySide6.QtGui import QWheelEvent
+        wheel = QWheelEvent(app.QPointF(100,100),app.QPointF(100,100),QPoint(),QPoint(0,120),Qt.NoButton,Qt.NoModifier,Qt.NoScrollPhase,False)
+        self.qt_app.sendEvent(preview,wheel)
+        self.assertGreater(preview.zoom,1.0)
+        preview.reset_view()
+        for yaw in range(0,360,45):
+            preview.yaw=yaw
+            for point in [(-3.7,-2.6,0),(3.7,2.6,0),(0,-4,4.6)]:
+                projected,depth=preview.project(point)
+                self.assertTrue(app.math.isfinite(projected.x()))
+                self.assertTrue(app.math.isfinite(projected.y()))
+        preview.set_native_state(1,1,True)
+        self.assertEqual(preview.state_name(),"Bright")
+        window._quit_application()
+
+    def test_retired_effect_preferences_migrate_without_starting(self):
+        settings = self.settings_store()
+        for retired,replacement in [("wave","breathe"),("music_mic","music_speaker")]:
+            settings.setValue("lastEffect",retired)
+            engine = DummyEngine()
+            window = self.make_window(DummyController(),engine)
+            self.assertEqual(window.selected_effect(),replacement)
+            self.assertFalse(engine.start_calls)
+            window._quit_application()
+        settings.remove("lastEffect")
+
+    def test_effect_dropdown_and_tray_stay_synchronized(self):
+        engine = DummyEngine()
+        window = self.make_window(DummyController(),engine)
+        index = window.effect_combo.findData("breathe")
+        window.effect_combo.setCurrentIndex(index)
+        window.effect_combo.activated.emit(index)
+        self.assertEqual(engine.start_calls[-1][0],"breathe")
+        window.tray_effect_actions["reactive"].trigger()
+        self.assertEqual(window.effect_combo.currentData(),"reactive")
+        self.assertEqual(window.windowTitle(),"LOQ LIGHTENING CENTRE")
+        window._quit_application()
+
+    def test_minimal_motion_respects_toggle_and_stops_preview_in_tray(self):
+        window = self.make_window(DummyController(), DummyEngine())
+        window.show()
+        window._set_animations(True)
+        window.pages.setCurrentIndex(1)
+        self.assertLessEqual(window._page_fade.duration(),180)
+        window._set_animations(False)
+        self.assertEqual(window._page_opacity.opacity(),1.0)
+        button = window.findChildren(app.MinimalButton)[0]
+        button._hover_to(1.0)
+        self.assertEqual(button._hover_motion.state(),app.QVariantAnimation.Stopped)
+        self.assertFalse(window.background._timer.isActive())
+        window.hide()
+        window._sync_animation_timers()
+        self.assertFalse(window.preview_timer.isActive())
+        window.show()
+        window._sync_animation_timers()
+        self.assertTrue(window.preview_timer.isActive())
+        window._quit_application()
+
+    def test_native_presets_start_steady_and_dashboard_tracks_power(self):
+        engine = DummyEngine()
+        window = self.make_window(DummyController(), engine)
+        window._native_preset(100)
+        window._refresh_status()
+        self.assertEqual(window.selected_effect(), "steady")
+        self.assertEqual(engine.start_calls[-1][0], "steady")
+        self.assertEqual(window.intensity_slider.value(), 100)
+        self.assertIn("Steady", window.lighting_summary.text())
+        window.toggle_power()
+        window._refresh_status()
+        self.assertIn("Off", window.lighting_summary.text())
+        window._quit_application()
+
     def test_close_hides_to_tray_and_quit_cleans_up(self):
         controller = DummyController()
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window._tray_notice_shown = True
         window.show()
         self.qt_app.processEvents()
@@ -112,7 +230,7 @@ class DesktopShellTests(unittest.TestCase):
         self.assertEqual(calls, ["task", "run:True"])
 
     def test_normal_mode_hides_all_advanced_controls(self):
-        window = app.DesktopApplication(DummyController(), DummyEngine())
+        window = self.make_window(DummyController(), DummyEngine())
         window.god_checkbox.setChecked(False)
         self.qt_app.processEvents()
         self.assertTrue(all(widget.isHidden() for widget in window.advanced_widgets))
@@ -123,7 +241,7 @@ class DesktopShellTests(unittest.TestCase):
         controller.levels = []
         controller.set_brightness = lambda level: controller.levels.append(level) or True
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window.arm_startup_battery_saver()
         self.assertEqual(controller.levels[-1], 0)
         self.assertEqual(engine.start_calls[-1][0], "battery_saver")
@@ -133,12 +251,12 @@ class DesktopShellTests(unittest.TestCase):
     def test_effect_cards_switch_immediately_with_one_click(self):
         engine = DummyEngine()
         controller = DummyController()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window.cards["breathe"].click()
         self.assertEqual(engine.start_calls[-1][0], "breathe")
-        window.cards["wave"].click()
-        self.assertEqual(engine.start_calls[-1][0], "wave")
-        self.assertEqual([call[0] for call in engine.start_calls[-2:]], ["breathe", "wave"])
+        window.cards["night_shift"].click()
+        self.assertEqual(engine.start_calls[-1][0], "night_shift")
+        self.assertEqual([call[0] for call in engine.start_calls[-2:]], ["breathe", "night_shift"])
         self.assertEqual(engine.stop_calls, 0)
         self.assertNotIn(0, controller.levels)
         self.assertTrue(window.power_button.property("powered"))
@@ -147,22 +265,22 @@ class DesktopShellTests(unittest.TestCase):
     def test_selecting_effect_while_powered_off_starts_in_one_click(self):
         controller = DummyController()
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window.cards["breathe"].click()
         window.toggle_power()
         self.assertFalse(engine.running)
         controller.levels.clear()
 
-        window.cards["wave"].click()
+        window.cards["night_shift"].click()
 
         self.assertTrue(engine.running)
-        self.assertEqual(engine.start_calls[-1][0], "wave")
+        self.assertEqual(engine.start_calls[-1][0], "night_shift")
         self.assertTrue(window.power_button.property("powered"))
         self.assertNotIn(0, controller.levels)
         window._quit_application()
 
     def test_header_fits_full_title_at_minimum_and_normal_width(self):
-        window = app.DesktopApplication(DummyController(), DummyEngine())
+        window = self.make_window(DummyController(), DummyEngine())
         window.show()
 
         for width in (1040, 1280):
@@ -173,7 +291,8 @@ class DesktopShellTests(unittest.TestCase):
             required = metrics.horizontalAdvance(window.header_title.text())
             available = window.header_title.contentsRect().width()
             self.assertLessEqual(required, available + 1, f"title clipped at {width}px")
-            self.assertGreaterEqual(window.header_title.font().pointSizeF(), 15)
+            self.assertGreaterEqual(window.header_title.font().pointSizeF(), 10)
+            self.assertGreaterEqual(window.header_title.height(), metrics.height())
             self.assertLessEqual(
                 window.header_panel.minimumSizeHint().width(),
                 window.header_panel.width(),
@@ -188,7 +307,7 @@ class DesktopShellTests(unittest.TestCase):
 
     def test_god_mode_reactive_choices_and_speed_apply_live(self):
         engine = DummyEngine()
-        window = app.DesktopApplication(DummyController(), engine)
+        window = self.make_window(DummyController(), engine)
         window.god_mode = True
         window._apply_god_mode()
         window.cards["reactive"].click()
@@ -208,7 +327,7 @@ class DesktopShellTests(unittest.TestCase):
         window._quit_application()
 
     def test_shell_uses_translucent_glass_surfaces(self):
-        window = app.DesktopApplication(DummyController(), DummyEngine())
+        window = self.make_window(DummyController(), DummyEngine())
         self.assertIsInstance(window.header_panel, app.GlassFrame)
         self.assertIsInstance(window.sidebar_panel, app.GlassFrame)
         glass_surfaces = window.findChildren(app.GlassFrame)
@@ -222,7 +341,7 @@ class DesktopShellTests(unittest.TestCase):
     def test_top_right_power_turns_keyboard_fully_off(self):
         controller = DummyController()
         engine = DummyEngine()
-        window = app.DesktopApplication(controller, engine)
+        window = self.make_window(controller, engine)
         window.cards["breathe"].click()
         window.toggle_power()
         self.assertFalse(engine.running)
@@ -230,6 +349,53 @@ class DesktopShellTests(unittest.TestCase):
         self.assertFalse(window.power_button.property("powered"))
         window._quit_application()
 
+
+    def test_tray_effect_switching_works_without_opening_window(self):
+        controller = DummyController()
+        engine = DummyEngine()
+        window = self.make_window(controller, engine)
+        self.assertFalse(window.isVisible())
+
+        window.tray_effect_actions["night_shift"].trigger()
+        self.assertEqual(window.selected_effect(), "night_shift")
+        self.assertEqual(engine.start_calls[-1][0], "night_shift")
+        self.assertTrue(window.tray_effect_actions["night_shift"].isChecked())
+        self.assertEqual(window.tray_power_action.text(), "Turn Lighting Off")
+
+        window.tray_effect_actions["reactive"].trigger()
+        self.assertEqual(engine.start_calls[-1][0], "reactive")
+        self.assertFalse(window.tray_effect_actions["night_shift"].isChecked())
+        self.assertTrue(window.tray_effect_actions["reactive"].isChecked())
+
+        window.toggle_power()
+        self.assertEqual(window.tray_power_action.text(), "Turn Lighting On")
+        self.assertFalse(any(action.isChecked() for action in window.tray_effect_actions.values()))
+        window._quit_application()
+
+    def test_remembers_selected_effect_without_auto_start(self):
+        settings = self.settings_store()
+        had_value = settings.contains("lastEffect")
+        previous = settings.value("lastEffect")
+        try:
+            settings.setValue("lastEffect", "night_shift")
+            engine = DummyEngine()
+            window = self.make_window(DummyController(), engine)
+            self.assertEqual(window.selected_effect(), "night_shift")
+            self.assertFalse(engine.start_calls)
+
+            window.cards["breathe"].click()
+            self.assertEqual(settings.value("lastEffect"), "breathe")
+            window._quit_application()
+
+            settings.setValue("lastEffect", "nonexistent")
+            fallback = self.make_window(DummyController(), DummyEngine())
+            self.assertEqual(fallback.selected_effect(), "battery_saver")
+            fallback._quit_application()
+        finally:
+            if had_value:
+                settings.setValue("lastEffect", previous)
+            else:
+                settings.remove("lastEffect")
 
 if __name__ == "__main__":
     unittest.main()

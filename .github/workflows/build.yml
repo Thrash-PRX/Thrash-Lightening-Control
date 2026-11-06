@@ -2,7 +2,7 @@ name: Build Windows application
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/v3.2.0-tray-control-reliability]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -29,7 +29,17 @@ jobs:
         run: python -m pip install -r requirements-build.txt
 
       - name: Compile-check source
-        run: python -m py_compile app.py diagnose_vantage.py
+        run: python -m py_compile app.py keyboard_preview_3d.py diagnose_vantage.py
+
+      - name: Run unit and UI regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -v
+
+      - name: Render dashboard previews
+        env:
+          QT_QPA_PLATFORM: windows
+        run: python tests/render_dashboard.py
 
       - name: Build unsigned executable
         run: python -m PyInstaller --clean --noconfirm keyboard-effects.spec
@@ -40,11 +50,9 @@ jobs:
       - name: Generate unsigned-build checksums
         shell: pwsh
         run: |
-          $exeHash = (Get-FileHash -Algorithm SHA256 installer-app/LenovoLOQBacklitEffects-Thrash/LenovoLOQBacklitEffects-Thrash.exe).Hash
-          $certHash = (Get-FileHash -Algorithm SHA256 installer/Thrash-Code-Signing.cer).Hash
+          $exeHash = (Get-FileHash -Algorithm SHA256 installer-app/ThrashLighteningControl/ThrashLighteningControl.exe).Hash
           @(
-            "$exeHash  LenovoLOQBacklitEffects-Thrash.exe"
-            "$certHash  Thrash-Code-Signing.cer"
+            "$exeHash  ThrashLighteningControl.exe"
           ) | Set-Content -Encoding ascii installer/SHA256SUMS.txt
 
       - name: Install Inno Setup
@@ -53,11 +61,33 @@ jobs:
       - name: Build unsigned compressed installer
         run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss'
 
+      - name: Smoke-test installer and uninstaller
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "ThrashInstallerSmoke"
+          $setup = Start-Process -FilePath "installer-dist/LOQLighteningCentre-Setup-v3.2.0.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$target`"") -Wait -PassThru -WindowStyle Hidden
+          if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
+          if (!(Test-Path "$target/ThrashLighteningControl.exe")) { throw "Installed executable missing" }
+          $expected = ((Get-Content "$target/Verification/SHA256SUMS.txt") -split '\s+')[0]
+          if ((Get-FileHash "$target/ThrashLighteningControl.exe").Hash -ne $expected) { throw "Installed executable hash mismatch" }
+          $remove = Start-Process -FilePath "$target/unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru -WindowStyle Hidden
+          if ($remove.ExitCode -ne 0) { throw "Uninstaller failed" }
+          if (Test-Path "$target/ThrashLighteningControl.exe") { throw "Executable remains after uninstall" }
+
+      - name: Hash packaged installer
+        shell: pwsh
+        run: |
+          $setup = "installer-dist/LOQLighteningCentre-Setup-v3.2.0.exe"
+          $hash = (Get-FileHash -Algorithm SHA256 $setup).Hash
+          "$hash  LOQLighteningCentre-Setup-v3.2.0.exe" | Set-Content -Encoding ascii installer-dist/SHA256SUMS.txt
+
       - name: Upload unsigned builds
         uses: actions/upload-artifact@v4
         with:
-          name: LenovoLOQBacklitEffects-Thrash-unsigned
+          name: LOQLighteningCentre-v3.2.0-unsigned
           path: |
-            dist/LenovoLOQBacklitEffects-Thrash.exe
-            installer-dist/LenovoLOQBacklitEffects-Thrash-Setup-v2.1.1.exe
+            ui-preview-*.png
+            dist/ThrashLighteningControl.exe
+            installer-dist/LOQLighteningCentre-Setup-v3.2.0.exe
+            installer-dist/SHA256SUMS.txt
           if-no-files-found: error

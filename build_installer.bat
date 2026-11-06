@@ -12,19 +12,12 @@ if not exist "%ISCC%" (
     exit /b 1
 )
 
-if not exist "installer\Thrash-Code-Signing.cer" (
-    echo [ERROR] installer\Thrash-Code-Signing.cer is missing.
-    exit /b 1
-)
-
-if not exist "installer\SHA256SUMS.txt" (
-    echo [ERROR] installer\SHA256SUMS.txt is missing.
-    exit /b 1
-)
-
 set "PYTHON=python"
 where py >nul 2>nul && set "PYTHON=py"
 %PYTHON% -m PyInstaller --clean --noconfirm --distpath installer-app --workpath build\installer-app keyboard-effects-installer.spec
+if errorlevel 1 exit /b 1
+
+powershell -NoProfile -Command "$h = (Get-FileHash -Algorithm SHA256 'installer-app/ThrashLighteningControl/ThrashLighteningControl.exe').Hash; ($h + '  ThrashLighteningControl.exe') | Set-Content -Encoding ascii installer/SHA256SUMS.txt"
 if errorlevel 1 exit /b 1
 
 "%ISCC%" installer.iss

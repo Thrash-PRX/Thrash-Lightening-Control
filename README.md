@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/app-icon.png" width="128" alt="Thrash Lightening Control icon">
+  <img src="assets/app-icon.png" width="128" alt="LOQ LIGHTENING CENTRE icon">
 </p>
 
-<h1 align="center">Thrash Lightening Control</h1>
+<h1 align="center">LOQ LIGHTENING CENTRE</h1>
 
 <p align="center">A native Windows lighting lab for compatible Lenovo LOQ white-backlit keyboards.</p>
 
@@ -12,21 +12,23 @@
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-22c55e">
 </p>
 
-## What v3.1.2 does
+**THRASH · Made by Hanif**
 
-The app controls the keyboard's global white backlight through Lenovo Vantage's installed `IdeaNotebookAddin` interface. It is a real native desktop application: no localhost page, browser server, telemetry, cloud account, or audio upload.
+Bolder headings, 140 ms hover feedback, 160 ms page fades and a 180 ms window entrance keep motion restrained. Interface animations can be disabled in Settings. Decorative background timers stay off in the monochrome interface, and live preview sampling stops while hidden in the tray.
 
-- Original Legion Space-inspired navigation with live background-blurred liquid-glass panels, animated Thrash branding, and a textured background
-- Dark and Light modes with Ion, Nova, Solar, and Matrix accent themes
-- Battery Saver that starts dark at Windows sign-in, wakes on keyboard or mouse input, and sleeps after 30 seconds of total input inactivity
-- Rebuilt 96 Hz Breathe renderer with a slower symmetric curve, protected speed range, and 1–100 perceived intensity control
-- One-click effect switching with a persistent master power control in the top-right corner
-- Streamlined Reactive mode with true key-hold tracking, a timed single-pulse alternative in God Mode, and tuned default timing
-- Separate Music / Mic and Music / Speaker modes; Speaker uses Windows output and adaptive beat-onset detection
-- Optional God Mode that reveals speed, reactive variants, and the Battery Saver timeout after a red unlock animation
-- System-tray operation, Task Manager-visible startup entry, diagnostics, privacy information, and clean uninstall
+## v3.2.0 development branch
 
-The keyboard hardware exposes only Off, Dim, and Bright. Intermediate intensities and smoother fades are approximated with fast pulse-density blending. This is the smoothest transition the exposed Lenovo interface permits, but it cannot become the same hardware-native PWM animation available on keyboards with a dedicated lighting controller.
+The URX-style native dashboard includes a rotatable 3D LOQ-inspired laptop with a chassis, hinged lid, screen, keyboard, numpad and touchpad. Drag to orbit, scroll to zoom, use arrow keys or the rotation buttons, and double-click/Home/Reset view to return. This is a stylized model built from geometry based on the supplied photo, not Lenovo CAD. It uses the existing Qt painter and adds no webview or 3D-engine runtime. Camera and native-state changes trigger redraws; it does not spin continuously.
+
+Keycaps are a single white lighting surface driven by cached native Off/Dim/Bright state. There are no extra hardware calls from the preview, invented RGB controls or per-key hardware effects.
+
+The catalog now contains Steady, Battery Saver, Calm Breathe, Reactive, Speaker Beats, Focus Timer and Night Shift. Focus Timer repeats 25 minutes at steady brightness, a gentle two-breathe break reminder, then a dark break for the rest of the 30-minute cycle. Night Shift uses local time to dim from 10 PM through 7 AM. Its night level remains on for one-level keyboards. Focus timing restarts when the mode is selected again.
+
+Surge Wave and microphone following were retired after review. Saved preferences migrate to Calm Breathe and Speaker Beats without auto-starting. The microphone implementation and sounddevice dependency were removed. See [effect review](docs/effects-review.md).
+
+Effect envelopes use native brightness steps with hysteresis, not rapid software PWM. Continuous hardware dimming is unavailable. The app remains standalone, using a private Lenovo compatibility bridge; see [integration findings](docs/vantage-integration.md).
+
+CI artifacts are unsigned development builds. Hardware acceptance is still required before release.
 
 ## Requirements
 
@@ -39,15 +41,7 @@ Compatibility is detected from Lenovo Vantage's backlight capability rather than
 
 ## Download and install
 
-1. Open the repository's [Releases](../../releases) page.
-2. Download `ThrashLighteningControl-Setup-v3.1.2.exe` and `SHA256SUMS.txt`.
-3. If Chrome, Edge, or another browser blocks the installer, open the browser's **Downloads** page (`Ctrl+J`), locate the blocked file, and choose **Keep**, **Allow download**, or **Download unsafe file**. Only allow it when it came from this repository.
-4. Verify the installer's SHA-256 value against `SHA256SUMS.txt`.
-5. Run the installer and accept the Windows administrator prompt.
-
-The compressed installer contains the application, public Thrash certificate, verification notes, checksum, README, license, shortcuts, and uninstaller. It does not silently add the self-signed certificate to a trusted store.
-
-The release is Authenticode-signed with a self-signed `CN=Thrash` certificate. Windows may still display an unknown-publisher or reputation warning on another PC. A universally trusted publisher label requires a commercial CA-issued certificate.
+Stable releases remain on the repository [Releases](../../releases) page. For v3.2.0 validation, download the unsigned Windows build artifact from the branch PR checks and compare its installer SHA-256 with the accompanying checksum file. The installer does not install certificates or Lenovo assemblies.
 
 ## How to use
 
@@ -61,31 +55,25 @@ The release is Authenticode-signed with a self-signed `CN=Thrash` certificate. W
 
 ## Modes
 
-| Mode | Behavior |
+| Mode | Purpose |
 | --- | --- |
-| Battery Saver | Soft wake on keyboard or mouse input; off after 30 seconds of total input inactivity |
-| Breathe | Slow symmetric breathing at a stable 96 Hz render cadence |
-| Heartbeat | Double-pulse rhythm |
-| Disco | Random high-energy pattern |
-| Pulse | Fast rise and controlled fade |
-| Binary Clock | Encodes the current seconds in six pulses |
-| Wave | Fast surge, held crest, long tail, and a smaller secondary ripple |
-| Reactive | Dim idle, bright keypress, smooth release; accurately follows multiple held keys |
-| Music / Mic | Follows energy from the default microphone locally |
-| Music / Speaker | Reacts to beat-like transients from Windows speaker output, not the microphone |
-
-Blink, Strobe, SOS, Lightning, and Candle were removed in v3.1.1 to keep the standard experience focused. Speed and alternate Reactive behaviors are hidden unless God Mode is enabled. In Reactive Lab, **Single timed pulse** ends on its timer, while **Hold until every key is released** remains active until the last physical key is released.
+| Steady | Constant Dim or Bright |
+| Battery Saver | Wake on input, sleep after inactivity |
+| Calm Breathe | Slow symmetric native-step rhythm |
+| Reactive | Brighten on typing, soften on release |
+| Speaker Beats | Follow Windows output peaks without a microphone |
+| Focus Timer | 25-minute focus, gentle reminder, dark break |
+| Night Shift | Automatic 10 PM–7 AM dimming using local time |
 
 ## Battery Saver, startup, and tray
 
-When launched by Windows startup, the keyboard begins off. Battery Saver runs quietly in the tray and the first keyboard or mouse input breathes the light up to the user's remembered 1–100 intensity. Mouse movement, clicks, scrolling, and keypresses all reset the timer. After 30 seconds without any of those inputs, it fades out again. The timeout can be changed only in God Mode.
+When launched by Windows startup, the keyboard begins off. Battery Saver runs quietly in the tray and the first keyboard or mouse input restores the user's chosen native Dim or Bright level directly, without stepping through other illuminated levels. Mouse movement, clicks, scrolling, and keypresses all reset the timer. After 30 seconds without any of those inputs, it fades out again. The timeout can be changed only in God Mode.
 
-**Run at Windows Startup** creates a current-user Startup apps entry and an elevated on-demand scheduled task named `Thrash Lightening Control`. This avoids leaving a visible console window and lets the entry appear in Task Manager. Turning the option off removes both entries. No Windows service is installed.
+**Run at Windows Startup** creates a current-user Startup apps entry and an elevated on-demand scheduled task with the stable identifier `Thrash Lightening Control`. This avoids leaving a visible console window and lets the entry appear in Task Manager. Turning the option off removes both entries. No Windows service is installed.
 
 ## Audio privacy
 
-- Music / Mic analyzes short microphone blocks in memory. Nothing is saved or transmitted.
-- Music / Speaker reads the Windows Core Audio output peak meter. It does not open the microphone, record speaker samples, or upload audio.
+Speaker Beats reads Windows Core Audio output peaks. It does not open a microphone, capture audio samples, record or upload audio.
 
 ## Why PowerShell appears in Task Manager
 
@@ -94,8 +82,8 @@ Lenovo exposes this backlight interface through private .NET assemblies installe
 ## Build from source
 
 ```powershell
-git clone https://github.com/Thrash-PRX/Lenovo-LOQ-Backlit-Effects-Thrash.git
-cd Lenovo-LOQ-Backlit-Effects-Thrash
+git clone https://github.com/Thrash-PRX/Thrash-Lightening-Control.git
+cd Thrash-Lightening-Control
 py -m pip install -r requirements-build.txt
 py -m PyInstaller --clean --noconfirm keyboard-effects.spec
 ```
@@ -109,3 +97,5 @@ See [Troubleshooting](docs/troubleshooting.md), [Contributing](CONTRIBUTING.md),
 Lenovo, LOQ, Legion, IdeaPad, and Lenovo Vantage are trademarks of Lenovo. ASUS, TUF, and Armoury Crate are trademarks of their respective owners. This independent project is not affiliated with or endorsed by those companies, and it does not redistribute Lenovo proprietary DLLs.
 
 Original project code is available under the [MIT License](LICENSE).
+
+Internal executable, preference store, scheduled task and installation directory identifiers remain compatible with previous Thrash installations. Windows product metadata and display names use LOQ LIGHTENING CENTRE.
